@@ -23,10 +23,10 @@ jobs:
           -e "ssh -o StrictHostKeyChecking=no" ./ \
           ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }}:/home/deploy/membership-platform/notification-service/
 
-      - name: Build and restart notification-service
+      - name: Build and restart notification
         run: |
           ssh -o StrictHostKeyChecking=no ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} << 'EOF'
             cd /home/deploy/membership-platform/notification-service
-            docker compose build notification-service
-            docker compose up -d notification-service
+            docker compose build notification
+            docker compose up -d notification
           EOF
