@@ -1,0 +1,6 @@
+# Placeholder for RabbitMQ event listeners
+# Example listener files:
+# - user.events.listener.js
+# - notification.events.listener.js
+# etc.
+
