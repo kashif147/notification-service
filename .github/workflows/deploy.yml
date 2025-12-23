@@ -30,4 +30,3 @@ jobs:
             docker compose build notification-service
             docker compose up -d notification-service
           EOF
-
