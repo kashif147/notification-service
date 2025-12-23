@@ -22,7 +22,7 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
-    "@membership/policy-middleware": "github:kashif147/policy-middleware#gateway",
+    "@membership/policy-middleware": "file:../policy-middleware",
     "@projectShell/rabbitmq-middleware": "github:kashif147/rabbitmq-middleware",
     "amqplib": "^0.10.9",
     "compression": "^1.7.4",
