@@ -19,6 +19,8 @@ async function initEventSystem() {
       url: process.env.RABBIT_URL,
       logger: logger,
       prefetch: 10,
+      connectionName: "notification-service",
+      serviceName: "notification-service",
     });
     logger.info("Event system initialized with middleware");
   } catch (error) {
