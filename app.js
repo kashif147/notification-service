@@ -155,15 +155,9 @@ app.use(loggerMiddleware);
 app.use(responseMiddleware);
 app.use(limiterGeneral);
 
-app.get("/health", (req, res) =>
-  res.success({
-    status: "healthy",
-    service: "notification-service",
-    timestamp: new Date().toISOString(),
-    port: process.env.PORT || 4010,
-    environment: process.env.NODE_ENV || "development",
-  })
-);
+app.get("/health", (req, res) => {
+  res.status(200).json({ status: "UP" });
+});
 
 app.get("/health/events", (req, res) => {
   res.success({
