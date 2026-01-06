@@ -1,0 +1,113 @@
+{
+  "name": "Push Delivery Worker",
+  "nodes": [
+    {
+      "id": "rabbit",
+      "name": "RabbitMQ Trigger",
+      "type": "n8n-nodes-base.rabbitmqTrigger",
+      "parameters": {
+        "queue": "push.delivery",
+        "acknowledge": true
+      },
+      "position": [200, 200],
+      "credentials": { "rabbitmq": "RabbitMQ-Creds" }
+    },
+    {
+      "id": "parse",
+      "name": "Parse",
+      "type": "n8n-nodes-base.function",
+      "position": [450, 200],
+      "parameters": {
+        "functionCode": "return [{ json: JSON.parse($json.message) }];"
+      }
+    },
+    {
+      "id": "template",
+      "name": "Fetch Template",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [700, 200],
+      "parameters": {
+        "method": "GET",
+        "url": "https://projectshell-vm.northeurope.cloudapp.azure.com/communication-service/api/templates/{{$json.templateId}}"
+      }
+    },
+    {
+      "id": "merge",
+      "name": "Merge Message",
+      "type": "n8n-nodes-base.function",
+      "position": [950, 200],
+      "parameters": {
+        "functionCode": "let text = $items(0).json.body;\nfor(const[k,v] of Object.entries($json.variables)) text=text.replaceAll(`{{${k}}}`,v);\nreturn [{json:{...$json,text}}];"
+      }
+    },
+    {
+      "id": "sendFCM",
+      "name": "Send Mobile Push (FCM)",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1200, 150],
+      "parameters": {
+        "method": "POST",
+        "url": "https://fcm.googleapis.com/fcm/send",
+        "jsonParameters": true,
+        "authentication": "headerAuth",
+        "options": {},
+        "body": {
+          "to": "={{$json.deviceToken}}",
+          "notification": {
+            "title": "={{$json.title}}",
+            "body": "={{$json.text}}"
+          }
+        }
+      },
+      "credentials": { "httpHeaderAuth": "FCM-Server-Key" }
+    },
+    {
+      "id": "sendWeb",
+      "name": "Send Web Push",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1200, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "https://projectshell-vm.northeurope.cloudapp.azure.com/api/notify/web",
+        "jsonParameters": true,
+        "body": {
+          "userId": "={{$json.userId}}",
+          "title": "={{$json.title}}",
+          "message": "={{$json.text}}",
+          "tenantId": "={{$json.tenantId}}"
+        }
+      }
+    },
+    {
+      "id": "status",
+      "name": "Update Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1500, 200],
+      "parameters": {
+        "method": "POST",
+        "url": "https://projectshell-vm.northeurope.cloudapp.azure.com/notification-service/api/update-status",
+        "jsonParameters": true,
+        "body": {
+          "notificationId": "={{$json.notificationId}}",
+          "channel": "push",
+          "status": "sent",
+          "timestamp": "={{new Date().toISOString()}}"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "parse": { "main": [[{ "node": "template", "index": 0 }]] },
+    "template": { "main": [[{ "node": "merge", "index": 0 }]] },
+    "merge": {
+      "main": [
+        [
+          { "node": "sendFCM", "index": 0 },
+          { "node": "sendWeb", "index": 0 }
+        ]
+      ]
+    },
+    "sendFCM": { "main": [[{ "node": "status", "index": 0 }]] },
+    "sendWeb": { "main": [[{ "node": "status", "index": 0 }]] }
+  }
+}

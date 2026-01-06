@@ -1,7 +1,13 @@
 #!/usr/bin/env node
 
-const dotenvFlow = require("dotenv-flow");
-dotenvFlow.config();
+// Load .env file based on environment
+if (process.env.NODE_ENV === "staging") {
+  require("dotenv-flow").config({ nodeEnv: "staging" });
+} else if (process.env.NODE_ENV !== "production") {
+  require("dotenv-flow").config({ nodeEnv: "development" });
+}
+// Production uses Azure Application Settings
+
 const { shutdownEventSystem } = require("../rabbitMQ/index.js");
 const logger = require("../config/logger.js");
 const app = require("../app.js");

@@ -1,0 +1,79 @@
+{
+  "name": "SMS Delivery Worker",
+  "nodes": [
+    {
+      "id": "rabbitmq",
+      "name": "RabbitMQ Trigger",
+      "type": "n8n-nodes-base.rabbitmqTrigger",
+      "position": [200, 200],
+      "parameters": {
+        "queue": "sms.delivery",
+        "acknowledge": true
+      },
+      "credentials": { "rabbitmq": "RabbitMQ-Creds" }
+    },
+    {
+      "id": "parse",
+      "name": "Parse Payload",
+      "type": "n8n-nodes-base.function",
+      "position": [450, 200],
+      "parameters": {
+        "functionCode": "return [{ json: JSON.parse($json.message) }];"
+      }
+    },
+    {
+      "id": "template",
+      "name": "Fetch Template",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [700, 200],
+      "parameters": {
+        "url": "https://projectshell-vm.northeurope.cloudapp.azure.com/communication-service/api/templates/{{$json.templateId}}",
+        "method": "GET"
+      }
+    },
+    {
+      "id": "merge",
+      "name": "Merge SMS Template",
+      "type": "n8n-nodes-base.function",
+      "position": [950, 200],
+      "parameters": {
+        "functionCode": "let msg = $items(0).json.text;\nfor (const [k,v] of Object.entries($json.variables)) msg = msg.replaceAll(`{{${k}}}`,v);\nreturn [{ json: {...$json, msg } }];"
+      }
+    },
+    {
+      "id": "send",
+      "name": "Send SMS Twilio",
+      "type": "n8n-nodes-base.twilio",
+      "position": [1200, 200],
+      "parameters": {
+        "from": "+1000000000",
+        "to": "={{$json.phone}}",
+        "message": "={{$json.msg}}"
+      },
+      "credentials": { "twilioApi": "Twilio-SMS-Creds" }
+    },
+    {
+      "id": "status",
+      "name": "Update Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1450, 200],
+      "parameters": {
+        "method": "POST",
+        "jsonParameters": true,
+        "url": "https://projectshell-vm.northeurope.cloudapp.azure.com/notification-service/api/update-status",
+        "body": {
+          "notificationId": "={{$json.notificationId}}",
+          "channel": "sms",
+          "status": "sent",
+          "timestamp": "={{new Date().toISOString()}}"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "parse": { "main": [[{ "node": "template", "index": 0 }]] },
+    "template": { "main": [[{ "node": "merge", "index": 0 }]] },
+    "merge": { "main": [[{ "node": "send", "index": 0 }]] },
+    "send": { "main": [[{ "node": "status", "index": 0 }]] }
+  }
+}

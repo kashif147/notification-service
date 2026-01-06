@@ -73,6 +73,8 @@ const {
   setupConsumers,
   shutdownEventSystem,
 } = require("./rabbitMQ/index.js");
+const bodyParser = require("body-parser");
+const firebaseRoutes = require("./routes/firebase.route.js");
 
 const app = express();
 
@@ -154,6 +156,11 @@ app.use(requestId);
 app.use(loggerMiddleware);
 app.use(responseMiddleware);
 app.use(limiterGeneral);
+
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
+
+app.use("/api/firebase", firebaseRoutes);
 
 app.get("/health", (req, res) => {
   res.status(200).json({ status: "UP" });

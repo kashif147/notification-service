@@ -70,3 +70,6 @@ dist/
 build/
 *.map
 
+# Firebase credentials
+util/firebaseAdminSDK.json
+

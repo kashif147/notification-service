@@ -1,0 +1,149 @@
+{
+  "name": "txn-email-worker",
+  "nodes": [
+    {
+      "id": "rabbitTrigger",
+      "name": "RabbitMQ Trigger",
+      "type": "n8n-nodes-base.rabbitmqTrigger",
+      "position": [200, 250],
+      "parameters": {
+        "queue": "txn.email.delivery",
+        "acknowledge": true
+      },
+      "credentials": {
+        "rabbitmq": "RabbitMQ-Creds"
+      }
+    },
+    {
+      "id": "parseJSON",
+      "name": "Parse Message",
+      "type": "n8n-nodes-base.function",
+      "position": [450, 250],
+      "parameters": {
+        "functionCode": "return [{ json: JSON.parse($json.message) }];"
+      }
+    },
+    {
+      "id": "fetchTemplate",
+      "name": "Fetch Template",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [700, 250],
+      "parameters": {
+        "method": "GET",
+        "url": "https://projectshell-vm.northeurope.cloudapp.azure.com/communication-service/api/templates/{{$json.templateId}}"
+      }
+    },
+    {
+      "id": "mergeTemplate",
+      "name": "Merge Template",
+      "type": "n8n-nodes-base.function",
+      "position": [950, 250],
+      "parameters": {
+        "functionCode": "let html = $items(0).json.body;\nfor (const [k, v] of Object.entries($json.variables || {})) {\n  html = html.replaceAll(`{{${k}}}`, v);\n}\nreturn [{ json: { ...$json, emailBody: html } }];"
+      }
+    },
+    {
+      "id": "sendSES",
+      "name": "Send Email (SES)",
+      "type": "n8n-nodes-base.awsSes",
+      "position": [1200, 200],
+      "disabled": true,
+      "parameters": {
+        "fromEmail": "no-reply@yourdomain.com",
+        "subject": "={{$json.subject || 'Notification'}}",
+        "toEmail": "={{$json.to}}",
+        "html": "={{$json.emailBody}}"
+      }
+    },
+    {
+      "id": "sendWebPush",
+      "name": "Web Push Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1200, 350],
+      "parameters": {
+        "method": "POST",
+        "url": "https://projectshell-vm.northeurope.cloudapp.azure.com/api/notify/web",
+        "jsonParameters": true,
+        "body": {
+          "userId": "={{$json.userId}}",
+          "tenantId": "={{$json.tenantId}}",
+          "title": "={{$json.subject}}",
+          "message": "={{$json.emailBody}}"
+        }
+      }
+    },
+    {
+      "id": "updateStatus",
+      "name": "Update Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1450, 250],
+      "parameters": {
+        "method": "POST",
+        "url": "https://projectshell-vm.northeurope.cloudapp.azure.com/notification-service/api/update-status",
+        "jsonParameters": true,
+        "body": {
+          "notificationId": "={{$json.notificationId}}",
+          "channel": "email",
+          "status": "sent",
+          "timestamp": "={{new Date().toISOString()}}"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "parseJSON": {
+      "main": [
+        [
+          {
+            "node": "fetchTemplate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "fetchTemplate": {
+      "main": [
+        [
+          {
+            "node": "mergeTemplate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "mergeTemplate": {
+      "main": [
+        [
+          {
+            "node": "sendSES",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "sendWebPush",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "updateStatus",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "rabbitTrigger": {
+      "main": [
+        [
+          {
+            "node": "parseJSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
