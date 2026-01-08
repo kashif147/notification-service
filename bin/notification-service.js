@@ -3,6 +3,7 @@
 const dotenvFlow = require("dotenv-flow");
 dotenvFlow.config();
 const { shutdownEventSystem } = require("../rabbitMQ/index.js");
+const { disconnectDB } = require("../config/db.js");
 const logger = require("../config/logger.js");
 const app = require("../app.js");
 
@@ -21,7 +22,7 @@ async function shutdown(signal) {
     if (server) {
       await new Promise((res) => server.close(res));
     }
-    await Promise.allSettled([shutdownEventSystem()]);
+    await Promise.allSettled([shutdownEventSystem(), disconnectDB()]);
     process.exit(0);
   } catch (e) {
     logger.error(e, "Shutdown error");

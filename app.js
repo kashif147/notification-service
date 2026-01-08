@@ -73,6 +73,7 @@ const {
   setupConsumers,
   shutdownEventSystem,
 } = require("./rabbitMQ/index.js");
+const { mongooseConnection, disconnectDB } = require("./config/db.js");
 const bodyParser = require("body-parser");
 const firebaseRoutes = require("./routes/firebase.route.js");
 
@@ -83,6 +84,26 @@ app.set("etag", false);
 
 // Initialize event system - Now using middleware
 let eventSystemInitialized = false;
+let databaseInitialized = false;
+
+async function initializeDatabase() {
+  if (!process.env.MONGO_URI && !process.env.MONGO_USER) {
+    logger.warn("MongoDB not configured, skipping database initialization");
+    return;
+  }
+
+  try {
+    logger.info("MongoDB configured, initializing connection...");
+    await mongooseConnection();
+    databaseInitialized = true;
+    logger.info("Database initialized successfully");
+  } catch (error) {
+    logger.warn(
+      { error: error.message },
+      "Database initialization failed, continuing without database"
+    );
+  }
+}
 
 async function initializeEventSystem() {
   if (!process.env.RABBIT_URL) {
@@ -104,7 +125,8 @@ async function initializeEventSystem() {
   }
 }
 
-// Initialize event system on startup
+// Initialize database and event system on startup
+initializeDatabase();
 initializeEventSystem();
 
 // Graceful shutdown
@@ -113,6 +135,9 @@ process.on("SIGTERM", async () => {
   if (eventSystemInitialized) {
     await shutdownEventSystem();
   }
+  if (databaseInitialized) {
+    await disconnectDB();
+  }
   process.exit(0);
 });
 
@@ -120,6 +145,9 @@ process.on("SIGINT", async () => {
   logger.info("SIGINT received, shutting down gracefully...");
   if (eventSystemInitialized) {
     await shutdownEventSystem();
+  }
+  if (databaseInitialized) {
+    await disconnectDB();
   }
   process.exit(0);
 });
@@ -170,6 +198,14 @@ app.get("/health/events", (req, res) => {
   res.success({
     status: eventSystemInitialized ? "healthy" : "initializing",
     initialized: eventSystemInitialized,
+    timestamp: new Date().toISOString(),
+  });
+});
+
+app.get("/health/database", (req, res) => {
+  res.success({
+    status: databaseInitialized ? "healthy" : "initializing",
+    initialized: databaseInitialized,
     timestamp: new Date().toISOString(),
   });
 });
