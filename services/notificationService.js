@@ -5,7 +5,9 @@ const notificationService = {
   sendNotification: async (title, body, fcmToken) => {
     // Verify Firebase is initialized
     if (admin.apps.length === 0) {
-      const error = new Error("Firebase Admin SDK not initialized");
+      const error = new Error(
+        "Firebase Admin SDK not initialized. Please configure FIREBASE_SERVICE_ACCOUNT_JSON or provide firebaseAdminSDK.json file."
+      );
       logger.error(
         error,
         "Cannot send notification - Firebase not initialized"

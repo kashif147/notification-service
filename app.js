@@ -1,8 +1,10 @@
-// Load .env file based on environment
+// Environment variables should already be loaded in bin/notification-service.js
+// Only reload if NODE_ENV is explicitly set to staging or development
+// (This prevents overriding env vars already set in bin/notification-service.js)
 if (process.env.NODE_ENV === "staging") {
-  require("dotenv-flow").config({ nodeEnv: "staging" });
-} else if (process.env.NODE_ENV !== "production") {
-  require("dotenv-flow").config({ nodeEnv: "development" });
+  require("dotenv-flow").config({ nodeEnv: "staging", override: false });
+} else if (process.env.NODE_ENV === "development") {
+  require("dotenv-flow").config({ nodeEnv: "development", override: false });
 }
 // Production uses Azure Application Settings
 
