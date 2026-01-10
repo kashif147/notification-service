@@ -1,5 +1,7 @@
 const notificationService = require("../services/notificationService");
 const FCMToken = require("../models/fcmToken.model.js");
+const NotificationHistory = require("../models/notificationHistory.model.js");
+const mongoose = require("mongoose");
 const logger = require("../config/logger.js");
 
 const sendFirebaseNotification = {
@@ -166,6 +168,21 @@ const sendFirebaseNotification = {
         });
       }
 
+      // Get userId for notification history if not provided
+      let targetUserId = userId;
+      if (!targetUserId && fcmToken) {
+        // Try to find userId from token
+        const tokenRecord = await FCMToken.findOne({ fcmToken }).select(
+          "userId tenantId"
+        );
+        if (tokenRecord) {
+          targetUserId = tokenRecord.userId;
+          if (!tenantId) {
+            tenantId = tokenRecord.tenantId;
+          }
+        }
+      }
+
       // Send notifications to all tokens
       const results = await Promise.allSettled(
         tokensToSend.map((token) =>
@@ -175,6 +192,84 @@ const sendFirebaseNotification = {
 
       const successful = results.filter((r) => r.status === "fulfilled").length;
       const failed = results.filter((r) => r.status === "rejected").length;
+
+      // Save notification history for each result
+      const notificationHistoryPromises = [];
+
+      // If userId is provided, all tokens should have same userId/tenantId, so we can batch
+      // Otherwise, we need to look up each token individually
+      if (targetUserId && tenantId) {
+        // All tokens belong to same user, batch create
+        for (let i = 0; i < results.length; i++) {
+          const result = results[i];
+          const token = tokensToSend[i];
+
+          notificationHistoryPromises.push(
+            NotificationHistory.create({
+              tenantId,
+              userId: targetUserId,
+              fcmToken: token.substring(0, 20) + "...", // Store partial for privacy
+              title,
+              body,
+              status: result.status === "fulfilled" ? "sent" : "failed",
+              firebaseMessageId:
+                result.status === "fulfilled" ? result.value || null : null,
+              error:
+                result.status === "rejected"
+                  ? result.reason?.message ||
+                    result.reason?.toString() ||
+                    "Unknown error"
+                  : null,
+              sentAt: new Date(),
+            })
+          );
+        }
+      } else {
+        // Need to look up userId/tenantId for each token
+        for (let i = 0; i < results.length; i++) {
+          const result = results[i];
+          const token = tokensToSend[i];
+
+          const tokenRecord = await FCMToken.findOne({
+            fcmToken: token,
+          }).select("userId tenantId");
+
+          if (tokenRecord && tokenRecord.userId && tokenRecord.tenantId) {
+            notificationHistoryPromises.push(
+              NotificationHistory.create({
+                tenantId: tokenRecord.tenantId,
+                userId: tokenRecord.userId,
+                fcmToken: token.substring(0, 20) + "...", // Store partial for privacy
+                title,
+                body,
+                status: result.status === "fulfilled" ? "sent" : "failed",
+                firebaseMessageId:
+                  result.status === "fulfilled" ? result.value || null : null,
+                error:
+                  result.status === "rejected"
+                    ? result.reason?.message ||
+                      result.reason?.toString() ||
+                      "Unknown error"
+                    : null,
+                sentAt: new Date(),
+              })
+            );
+          } else {
+            logger.warn(
+              { fcmToken: token.substring(0, 20) + "..." },
+              "Skipping notification history - token not found or missing userId/tenantId"
+            );
+          }
+        }
+      }
+
+      // Save all notification histories (don't await, let it run in background)
+      Promise.all(notificationHistoryPromises).catch((err) => {
+        logger.error(
+          { error: err.message },
+          "Error saving notification history"
+        );
+      });
 
       logger.info(
         { total: tokensToSend.length, successful, failed },
@@ -194,6 +289,343 @@ const sendFirebaseNotification = {
       logger.error({ error: error.message }, "Error sending notification");
       return res.status(500).json({
         message: "Error sending notification",
+        error: error.message,
+        success: false,
+      });
+    }
+  },
+
+  // Get all active tokens
+  getAllActiveTokens: async (req, res) => {
+    try {
+      const { page = 1, limit = 50 } = req.query;
+      const skip = (page - 1) * limit;
+
+      const tokens = await FCMToken.find({ isActive: true })
+        .select("-__v")
+        .sort({ lastUsedAt: -1 })
+        .limit(parseInt(limit))
+        .skip(skip)
+        .lean();
+
+      const total = await FCMToken.countDocuments({ isActive: true });
+
+      logger.info(
+        { count: tokens.length, page, limit, total },
+        "Retrieved all active tokens"
+      );
+
+      res.status(200).json({
+        message: "Active tokens retrieved successfully",
+        success: true,
+        data: {
+          tokens,
+          pagination: {
+            page: parseInt(page),
+            limit: parseInt(limit),
+            total,
+            totalPages: Math.ceil(total / limit),
+          },
+        },
+      });
+    } catch (error) {
+      logger.error({ error: error.message }, "Error retrieving active tokens");
+      return res.status(500).json({
+        message: "Error retrieving active tokens",
+        error: error.message,
+        success: false,
+      });
+    }
+  },
+
+  // Get filtered tokens by tenantId, platform, deviceId, or userId
+  getFilteredTokens: async (req, res) => {
+    try {
+      const {
+        tenantId,
+        userId,
+        platform,
+        deviceId,
+        isActive = true,
+      } = req.query;
+      const { page = 1, limit = 50 } = req.query;
+      const skip = (page - 1) * limit;
+
+      // Build query object based on provided filters
+      const query = {};
+
+      if (tenantId) {
+        query.tenantId = tenantId;
+      }
+
+      if (userId) {
+        query.userId = userId;
+      }
+
+      if (platform) {
+        // Validate platform value
+        const validPlatforms = ["ios", "android", "web"];
+        if (!validPlatforms.includes(platform)) {
+          return res.status(400).json({
+            message: `Invalid platform. Must be one of: ${validPlatforms.join(
+              ", "
+            )}`,
+            success: false,
+          });
+        }
+        query.platform = platform;
+      }
+
+      if (deviceId) {
+        query.deviceId = deviceId;
+      }
+
+      // Filter by active status (default to true, but allow explicit false)
+      if (isActive !== undefined) {
+        query.isActive = isActive === "true" || isActive === true;
+      }
+
+      const tokens = await FCMToken.find(query)
+        .select("-__v")
+        .sort({ lastUsedAt: -1 })
+        .limit(parseInt(limit))
+        .skip(skip)
+        .lean();
+
+      const total = await FCMToken.countDocuments(query);
+
+      logger.info(
+        {
+          filters: { tenantId, userId, platform, deviceId, isActive },
+          count: tokens.length,
+          page,
+          limit,
+          total,
+        },
+        "Retrieved filtered tokens"
+      );
+
+      res.status(200).json({
+        message: "Filtered tokens retrieved successfully",
+        success: true,
+        data: {
+          tokens,
+          filters: {
+            tenantId: tenantId || null,
+            userId: userId || null,
+            platform: platform || null,
+            deviceId: deviceId || null,
+            isActive: query.isActive,
+          },
+          pagination: {
+            page: parseInt(page),
+            limit: parseInt(limit),
+            total,
+            totalPages: Math.ceil(total / limit),
+          },
+        },
+      });
+    } catch (error) {
+      logger.error(
+        { error: error.message },
+        "Error retrieving filtered tokens"
+      );
+      return res.status(500).json({
+        message: "Error retrieving filtered tokens",
+        error: error.message,
+        success: false,
+      });
+    }
+  },
+
+  // Get notifications for a user
+  getNotifications: async (req, res) => {
+    try {
+      const { userId, isRead, status, page = 1, limit = 50 } = req.query;
+      const tenantId =
+        req.user?.tenantId || req.body.tenantId || req.query.tenantId;
+
+      if (!userId) {
+        return res.status(400).json({
+          message: "userId is required",
+          success: false,
+        });
+      }
+
+      if (!tenantId) {
+        return res.status(400).json({
+          message: "tenantId is required",
+          success: false,
+        });
+      }
+
+      const skip = (page - 1) * limit;
+
+      // Build query
+      const query = {
+        tenantId,
+        userId,
+      };
+
+      // Add read status filter if provided
+      if (isRead !== undefined) {
+        query.isRead = isRead === "true" || isRead === true;
+      }
+
+      // Add status filter if provided
+      if (status) {
+        const validStatuses = ["pending", "sent", "failed", "delivered"];
+        if (!validStatuses.includes(status)) {
+          return res.status(400).json({
+            message: `Invalid status. Must be one of: ${validStatuses.join(
+              ", "
+            )}`,
+            success: false,
+          });
+        }
+        query.status = status;
+      }
+
+      const notifications = await NotificationHistory.find(query)
+        .select("-__v -fcmToken") // Exclude sensitive fields
+        .sort({ createdAt: -1 }) // Most recent first
+        .limit(parseInt(limit))
+        .skip(skip)
+        .lean();
+
+      const total = await NotificationHistory.countDocuments(query);
+      const unreadCount = await NotificationHistory.countDocuments({
+        ...query,
+        isRead: false,
+      });
+
+      logger.info(
+        {
+          userId,
+          tenantId,
+          count: notifications.length,
+          page,
+          limit,
+          total,
+          unreadCount,
+        },
+        "Retrieved notifications"
+      );
+
+      res.status(200).json({
+        message: "Notifications retrieved successfully",
+        success: true,
+        data: {
+          notifications,
+          unreadCount,
+          pagination: {
+            page: parseInt(page),
+            limit: parseInt(limit),
+            total,
+            totalPages: Math.ceil(total / limit),
+          },
+        },
+      });
+    } catch (error) {
+      logger.error({ error: error.message }, "Error retrieving notifications");
+      return res.status(500).json({
+        message: "Error retrieving notifications",
+        error: error.message,
+        success: false,
+      });
+    }
+  },
+
+  // Mark notification(s) as read
+  markAsRead: async (req, res) => {
+    try {
+      const { notificationIds, userId } = req.body;
+      const tenantId = req.user?.tenantId || req.body.tenantId;
+
+      if (
+        !notificationIds ||
+        !Array.isArray(notificationIds) ||
+        notificationIds.length === 0
+      ) {
+        return res.status(400).json({
+          message: "notificationIds array is required and must not be empty",
+          success: false,
+        });
+      }
+
+      // Validate all notificationIds are valid MongoDB ObjectIds
+      const invalidIds = notificationIds.filter(
+        (id) => !mongoose.Types.ObjectId.isValid(id)
+      );
+      if (invalidIds.length > 0) {
+        return res.status(400).json({
+          message: "Invalid notification ID(s) provided",
+          success: false,
+          invalidIds,
+        });
+      }
+
+      if (!userId) {
+        return res.status(400).json({
+          message: "userId is required",
+          success: false,
+        });
+      }
+
+      if (!tenantId) {
+        return res.status(400).json({
+          message: "tenantId is required",
+          success: false,
+        });
+      }
+
+      // Build query to ensure user can only mark their own notifications
+      const query = {
+        _id: { $in: notificationIds },
+        userId,
+        tenantId,
+      };
+
+      const result = await NotificationHistory.updateMany(query, {
+        $set: {
+          isRead: true,
+          readAt: new Date(),
+        },
+      });
+
+      if (result.matchedCount === 0) {
+        return res.status(404).json({
+          message: "No notifications found matching the provided criteria",
+          success: false,
+        });
+      }
+
+      logger.info(
+        {
+          userId,
+          tenantId,
+          notificationIds,
+          matched: result.matchedCount,
+          modified: result.modifiedCount,
+        },
+        "Marked notifications as read"
+      );
+
+      res.status(200).json({
+        message: "Notifications marked as read successfully",
+        success: true,
+        data: {
+          matched: result.matchedCount,
+          modified: result.modifiedCount,
+        },
+      });
+    } catch (error) {
+      logger.error(
+        { error: error.message },
+        "Error marking notifications as read"
+      );
+      return res.status(500).json({
+        message: "Error marking notifications as read",
         error: error.message,
         success: false,
       });
