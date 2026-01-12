@@ -595,8 +595,11 @@ const sendFirebaseNotification = {
   // Mark notification(s) as read
   markAsRead: async (req, res) => {
     try {
-      const { notificationIds, userId } = req.body;
-      const tenantId = req.user?.tenantId || req.body.tenantId;
+      const { notificationIds } = req.body;
+
+      // Extract userId and tenantId from JWT token only (not from body)
+      const userId = req.user?.id || req.user?.sub || req.userId;
+      const tenantId = req.user?.tenantId || req.tenantId;
 
       if (
         !notificationIds ||
@@ -623,14 +626,14 @@ const sendFirebaseNotification = {
 
       if (!userId) {
         return res.status(400).json({
-          message: "userId is required",
+          message: "userId is required. Please ensure you are authenticated.",
           success: false,
         });
       }
 
       if (!tenantId) {
         return res.status(400).json({
-          message: "tenantId is required",
+          message: "tenantId is required. Please ensure you are authenticated.",
           success: false,
         });
       }
