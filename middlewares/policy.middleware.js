@@ -21,6 +21,12 @@ if (!process.env.POLICY_SERVICE_URL && process.env.NODE_ENV !== "development") {
   console.log(`✅ Policy service URL configured: ${policyServiceUrl}`);
 }
 
+// Log environment check on startup
+console.log("🔍 Policy Middleware Configuration:");
+console.log(`   - POLICY_SERVICE_URL: ${policyServiceUrl}`);
+console.log(`   - NODE_ENV: ${process.env.NODE_ENV || "not set"}`);
+console.log(`   - AUTH_BYPASS_ENABLED: ${process.env.AUTH_BYPASS_ENABLED || "not set"}`);
+
 // Create default policy middleware instance
 const defaultPolicyMiddleware = createDefaultPolicyMiddleware(
   policyServiceUrl,
