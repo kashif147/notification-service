@@ -491,9 +491,11 @@ const sendFirebaseNotification = {
   // Get notifications for a user
   getNotifications: async (req, res) => {
     try {
+      // Only accept filtering and pagination parameters from query
+      // userId and tenantId are NOT accepted as input - they come from JWT token only
       const { isRead, status, page = 1, limit = 50 } = req.query;
       
-      // Extract userId and tenantId from JWT token
+      // Extract userId and tenantId from JWT token only (not from query or body)
       const userId = req.user?.id || req.user?.sub || req.userId;
       const tenantId = req.user?.tenantId || req.tenantId;
 
