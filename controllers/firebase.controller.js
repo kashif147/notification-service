@@ -123,7 +123,14 @@ const sendFirebaseNotification = {
   sendNotification: async (req, res) => {
     try {
       const { title, body, fcmToken, userId } = req.body;
-      const tenantId = req.user?.tenantId || req.body.tenantId;
+      
+      // Extract tenantId and userId from JWT token as primary source
+      const jwtTenantId = req.user?.tenantId || req.tenantId;
+      const jwtUserId = req.user?.id || req.user?.sub || req.userId;
+      
+      // Use JWT values as fallback, then body, then query
+      let tenantId = jwtTenantId || req.body.tenantId;
+      let targetUserId = userId || jwtUserId;
 
       if (!title || !body) {
         return res.status(400).json({
@@ -139,7 +146,7 @@ const sendFirebaseNotification = {
         tokensToSend = [fcmToken];
       }
       // If userId provided, retrieve tokens from database
-      else if (userId) {
+      else if (targetUserId) {
         if (!tenantId) {
           return res.status(400).json({
             message: "tenantId is required when using userId",
@@ -148,7 +155,7 @@ const sendFirebaseNotification = {
         }
 
         const activeTokens = await FCMToken.find({
-          userId,
+          userId: targetUserId,
           tenantId,
           isActive: true,
         }).select("fcmToken");
@@ -168,8 +175,7 @@ const sendFirebaseNotification = {
         });
       }
 
-      // Get userId for notification history if not provided
-      let targetUserId = userId;
+      // Get userId and tenantId for notification history if not already determined
       if (!targetUserId && fcmToken) {
         // Try to find userId from token
         const tokenRecord = await FCMToken.findOne({ fcmToken }).select(
@@ -181,6 +187,14 @@ const sendFirebaseNotification = {
             tenantId = tokenRecord.tenantId;
           }
         }
+      }
+      
+      // Fallback to JWT values if still not determined
+      if (!targetUserId) {
+        targetUserId = jwtUserId;
+      }
+      if (!tenantId) {
+        tenantId = jwtTenantId;
       }
 
       // Send notifications to all tokens
@@ -263,13 +277,49 @@ const sendFirebaseNotification = {
         }
       }
 
-      // Save all notification histories (don't await, let it run in background)
-      Promise.all(notificationHistoryPromises).catch((err) => {
-        logger.error(
-          { error: err.message },
-          "Error saving notification history"
-        );
-      });
+      // Save all notification histories to database
+      if (notificationHistoryPromises.length > 0) {
+        try {
+          await Promise.all(notificationHistoryPromises);
+          logger.info(
+            { count: notificationHistoryPromises.length },
+            "Notification history saved to database"
+          );
+        } catch (err) {
+          logger.error(
+            { error: err.message },
+            "Error saving notification history"
+          );
+          // Don't fail the request if history save fails, but log it
+        }
+      } else {
+        // If no history was created, create a record anyway if we have userId/tenantId
+        if (targetUserId && tenantId) {
+          try {
+            await NotificationHistory.create({
+              tenantId,
+              userId: targetUserId,
+              fcmToken: tokensToSend[0] ? tokensToSend[0].substring(0, 20) + "..." : "unknown",
+              title,
+              body,
+              status: successful > 0 ? "sent" : "failed",
+              firebaseMessageId: null,
+              error: failed > 0 ? "Some notifications failed to send" : null,
+              sentAt: new Date(),
+            });
+            logger.info("Notification history saved to database (fallback)");
+          } catch (err) {
+            logger.error(
+              { error: err.message },
+              "Error saving notification history (fallback)"
+            );
+          }
+        } else {
+          logger.warn(
+            "Could not save notification history - missing userId or tenantId"
+          );
+        }
+      }
 
       logger.info(
         { total: tokensToSend.length, successful, failed },
@@ -441,20 +491,22 @@ const sendFirebaseNotification = {
   // Get notifications for a user
   getNotifications: async (req, res) => {
     try {
-      const { userId, isRead, status, page = 1, limit = 50 } = req.query;
-      const tenantId =
-        req.user?.tenantId || req.body.tenantId || req.query.tenantId;
+      const { isRead, status, page = 1, limit = 50 } = req.query;
+      
+      // Extract userId and tenantId from JWT token
+      const userId = req.user?.id || req.user?.sub || req.userId;
+      const tenantId = req.user?.tenantId || req.tenantId;
 
       if (!userId) {
         return res.status(400).json({
-          message: "userId is required",
+          message: "userId is required. Please ensure you are authenticated.",
           success: false,
         });
       }
 
       if (!tenantId) {
         return res.status(400).json({
-          message: "tenantId is required",
+          message: "tenantId is required. Please ensure you are authenticated.",
           success: false,
         });
       }
