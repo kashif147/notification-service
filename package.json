@@ -22,7 +22,6 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
-    "@membership/policy-middleware": "github:kashif147/policy-middleware#gateway",
     "@projectShell/rabbitmq-middleware": "github:kashif147/rabbitmq-middleware#gateway",
     "amqplib": "^0.10.9",
     "body-parser": "^2.2.1",

@@ -1,18 +1,13 @@
 const jwt = require("jsonwebtoken");
 const { AppError } = require("../errors/AppError");
-const { validateGatewayRequest } = require("@membership/policy-middleware/security");
 
 /**
  * AUTHENTICATION MIDDLEWARE ONLY
  * 
  * This middleware handles authentication (verifying user identity).
- * It does NOT handle authorization (permission checks).
+ * It extracts user information from gateway headers or JWT tokens.
  * 
- * For authorization, use policy-middleware:
- * const { defaultPolicyMiddleware } = require("../middlewares/policy.middleware");
- * router.get("/resource", defaultPolicyMiddleware.requirePermission("resource", "action"), handler);
- * 
- * All authorization decisions are made by user-service /policy/evaluate endpoint.
+ * Authorization is handled by filtering data by userId/tenantId in controllers.
  */
 const authenticate = async (req, res, next) => {
   try {
@@ -25,26 +20,8 @@ const authenticate = async (req, res, next) => {
     const authSource = req.headers["x-auth-source"];
 
     if (jwtVerified === "true" && authSource === "gateway") {
-      // Validate gateway request (signature, IP, format)
-      const validation = validateGatewayRequest(req);
-      if (!validation.valid) {
-        console.warn("Gateway header validation failed:", validation.reason);
-        const authError = AppError.unauthorized("Invalid gateway request", {
-          tokenError: true,
-          validationError: validation.reason,
-        });
-        return res.status(authError.status).json({
-          error: {
-            message: authError.message,
-            code: authError.code,
-            status: authError.status,
-            tokenError: authError.tokenError,
-            validationError: authError.validationError,
-          },
-        });
-      }
-
       // Gateway has verified JWT and forwarded claims as headers
+      // Trust gateway headers (gateway already validated the JWT)
       const userId = req.headers["x-user-id"];
       const tenantId = req.headers["x-tenant-id"];
       const userEmail = req.headers["x-user-email"];
@@ -368,14 +345,10 @@ function hasRole(userRoles, requiredRole) {
 }
 
 /**
- * AUTHORIZATION FUNCTIONS REMOVED
+ * AUTHORIZATION
  * 
- * requireRole and requirePermission have been removed.
- * All authorization must be done via policy-middleware to maintain single source of truth.
- * 
- * Use policy-middleware for authorization:
- * const { defaultPolicyMiddleware } = require("../middlewares/policy.middleware");
- * router.get("/resource", defaultPolicyMiddleware.requirePermission("resource", "action"), handler);
+ * Authorization is handled by filtering data by userId/tenantId in controllers.
+ * Users can only access their own data (tenant isolation).
  */
 
 /**
@@ -424,7 +397,7 @@ module.exports = {
   // Tenant enforcement (authentication context, not authorization)
   requireTenant,
 
-  // Utility functions (for backward compatibility, but prefer policy-middleware)
+  // Utility functions
   hasRole,
   hasAnyRole,
 

@@ -123,11 +123,11 @@ const sendFirebaseNotification = {
   sendNotification: async (req, res) => {
     try {
       const { title, body, fcmToken, userId } = req.body;
-      
+
       // Extract tenantId and userId from JWT token as primary source
       const jwtTenantId = req.user?.tenantId || req.tenantId;
       const jwtUserId = req.user?.id || req.user?.sub || req.userId;
-      
+
       // Use JWT values as fallback, then body, then query
       let tenantId = jwtTenantId || req.body.tenantId;
       let targetUserId = userId || jwtUserId;
@@ -188,7 +188,7 @@ const sendFirebaseNotification = {
           }
         }
       }
-      
+
       // Fallback to JWT values if still not determined
       if (!targetUserId) {
         targetUserId = jwtUserId;
@@ -299,7 +299,9 @@ const sendFirebaseNotification = {
             await NotificationHistory.create({
               tenantId,
               userId: targetUserId,
-              fcmToken: tokensToSend[0] ? tokensToSend[0].substring(0, 20) + "..." : "unknown",
+              fcmToken: tokensToSend[0]
+                ? tokensToSend[0].substring(0, 20) + "..."
+                : "unknown",
               title,
               body,
               status: successful > 0 ? "sent" : "failed",
@@ -494,7 +496,7 @@ const sendFirebaseNotification = {
       // Only accept filtering and pagination parameters from query
       // userId and tenantId are NOT accepted as input - they come from JWT token only
       const { isRead, status, page = 1, limit = 50 } = req.query;
-      
+
       // Extract userId and tenantId from JWT token only (not from query or body)
       const userId = req.user?.id || req.user?.sub || req.userId;
       const tenantId = req.user?.tenantId || req.tenantId;
