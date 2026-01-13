@@ -542,6 +542,7 @@ const sendFirebaseNotification = {
         query.status = status;
       }
 
+      // Query automatically excludes soft-deleted records via middleware
       const notifications = await NotificationHistory.find(query)
         .select("-__v -fcmToken") // Exclude sensitive fields
         .sort({ createdAt: -1 }) // Most recent first
@@ -639,10 +640,12 @@ const sendFirebaseNotification = {
       }
 
       // Build query to ensure user can only mark their own notifications
+      // Exclude soft-deleted notifications
       const query = {
         _id: { $in: notificationIds },
         userId,
         tenantId,
+        deletedAt: null,
       };
 
       const result = await NotificationHistory.updateMany(query, {
@@ -685,6 +688,163 @@ const sendFirebaseNotification = {
       );
       return res.status(500).json({
         message: "Error marking notifications as read",
+        error: error.message,
+        success: false,
+      });
+    }
+  },
+
+  // Delete a single notification (soft delete)
+  deleteNotification: async (req, res) => {
+    try {
+      const { notificationId } = req.params;
+
+      // Extract userId and tenantId from JWT token only
+      const userId = req.user?.id || req.user?.sub || req.userId;
+      const tenantId = req.user?.tenantId || req.tenantId;
+
+      if (!notificationId) {
+        return res.status(400).json({
+          message: "notificationId is required",
+          success: false,
+        });
+      }
+
+      // Validate notificationId is a valid MongoDB ObjectId
+      if (!mongoose.Types.ObjectId.isValid(notificationId)) {
+        return res.status(400).json({
+          message: "Invalid notification ID",
+          success: false,
+        });
+      }
+
+      if (!userId) {
+        return res.status(400).json({
+          message: "userId is required. Please ensure you are authenticated.",
+          success: false,
+        });
+      }
+
+      if (!tenantId) {
+        return res.status(400).json({
+          message: "tenantId is required. Please ensure you are authenticated.",
+          success: false,
+        });
+      }
+
+      // Build query to ensure user can only delete their own notifications
+      const query = {
+        _id: notificationId,
+        userId,
+        tenantId,
+        deletedAt: null, // Only delete if not already deleted
+      };
+
+      const notification = await NotificationHistory.findOneAndUpdate(
+        query,
+        {
+          $set: {
+            deletedAt: new Date(),
+          },
+        },
+        { new: true }
+      );
+
+      if (!notification) {
+        return res.status(404).json({
+          message: "Notification not found or already deleted",
+          success: false,
+        });
+      }
+
+      logger.info(
+        {
+          userId,
+          tenantId,
+          notificationId,
+        },
+        "Notification soft deleted"
+      );
+
+      res.status(200).json({
+        message: "Notification deleted successfully",
+        success: true,
+        data: {
+          notificationId: notification._id,
+          deletedAt: notification.deletedAt,
+        },
+      });
+    } catch (error) {
+      logger.error(
+        { error: error.message },
+        "Error deleting notification"
+      );
+      return res.status(500).json({
+        message: "Error deleting notification",
+        error: error.message,
+        success: false,
+      });
+    }
+  },
+
+  // Delete all notifications for a user (soft delete)
+  deleteAllNotifications: async (req, res) => {
+    try {
+      // Extract userId and tenantId from JWT token only
+      const userId = req.user?.id || req.user?.sub || req.userId;
+      const tenantId = req.user?.tenantId || req.tenantId;
+
+      if (!userId) {
+        return res.status(400).json({
+          message: "userId is required. Please ensure you are authenticated.",
+          success: false,
+        });
+      }
+
+      if (!tenantId) {
+        return res.status(400).json({
+          message: "tenantId is required. Please ensure you are authenticated.",
+          success: false,
+        });
+      }
+
+      // Build query to ensure user can only delete their own notifications
+      const query = {
+        userId,
+        tenantId,
+        deletedAt: null, // Only delete if not already deleted
+      };
+
+      const result = await NotificationHistory.updateMany(query, {
+        $set: {
+          deletedAt: new Date(),
+        },
+      });
+
+      logger.info(
+        {
+          userId,
+          tenantId,
+          matched: result.matchedCount,
+          modified: result.modifiedCount,
+        },
+        "All notifications soft deleted"
+      );
+
+      res.status(200).json({
+        message: "All notifications deleted successfully",
+        success: true,
+        data: {
+          deletedCount: result.modifiedCount,
+        },
+      });
+    } catch (error) {
+      logger.error(
+        { error: error.message },
+        "Error deleting all notifications"
+      );
+      return res.status(500).json({
+        message: "Error deleting all notifications",
         error: error.message,
         success: false,
       });

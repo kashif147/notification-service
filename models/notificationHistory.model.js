@@ -70,6 +70,12 @@ const NotificationHistorySchema = new mongoose.Schema(
       type: mongoose.Schema.Types.Mixed,
       default: {},
     },
+    // Soft delete support
+    deletedAt: {
+      type: Date,
+      default: null,
+      index: true,
+    },
   },
   {
     timestamps: true, // Adds createdAt and updatedAt
@@ -87,5 +93,20 @@ NotificationHistorySchema.index({
 NotificationHistorySchema.index({ userId: 1, isRead: 1, createdAt: -1 });
 NotificationHistorySchema.index({ status: 1, createdAt: -1 });
 NotificationHistorySchema.index({ fcmToken: 1, createdAt: -1 });
+NotificationHistorySchema.index({ tenantId: 1, userId: 1, deletedAt: 1 });
+
+// Query middleware to exclude soft-deleted records by default
+NotificationHistorySchema.pre(/^find/, function (next) {
+  // Only apply if deletedAt is not explicitly set in the query
+  if (this.getQuery().deletedAt === undefined) {
+    this.where({ deletedAt: null });
+  }
+  next();
+});
+
+// Static method to include deleted records
+NotificationHistorySchema.statics.includeDeleted = function () {
+  return this.find().where({ deletedAt: { $ne: null } });
+};
 
 module.exports = mongoose.model("NotificationHistory", NotificationHistorySchema);

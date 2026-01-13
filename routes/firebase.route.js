@@ -18,5 +18,7 @@ router.post("/send-notification", sendFirebaseNotification.sendNotification);
 // Users can only access their own notifications (tenant isolation)
 router.get("/notifications", authenticate, sendFirebaseNotification.getNotifications);
 router.post("/notifications/mark-read", authenticate, sendFirebaseNotification.markAsRead);
+router.delete("/notifications/:notificationId", authenticate, sendFirebaseNotification.deleteNotification);
+router.delete("/notifications", authenticate, sendFirebaseNotification.deleteAllNotifications);
 
 module.exports = router;
