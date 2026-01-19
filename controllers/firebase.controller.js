@@ -775,10 +775,7 @@ const sendFirebaseNotification = {
         },
       });
     } catch (error) {
-      logger.error(
-        { error: error.message },
-        "Error deleting notification"
-      );
+      logger.error({ error: error.message }, "Error deleting notification");
       return res.status(500).json({
         message: "Error deleting notification",
         error: error.message,

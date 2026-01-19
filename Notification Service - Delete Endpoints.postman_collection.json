@@ -1,0 +1,75 @@
+{
+  "info": {
+    "name": "Notification Service - Delete Endpoints",
+    "description": "Delete endpoints for Notification Service - Firebase Cloud Messaging",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "notification-service-delete"
+  },
+  "item": [
+    {
+      "name": "Delete Notifications",
+      "item": [
+        {
+          "name": "Delete Notification",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "description": "Required: JWT token for authenticated requests. userId and tenantId are extracted from the token."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/firebase/notifications/:notificationId",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "firebase", "notifications", ":notificationId"],
+              "variable": [
+                {
+                  "key": "notificationId",
+                  "value": "notification-id-here",
+                  "description": "MongoDB ObjectId of the notification to delete"
+                }
+              ]
+            },
+            "description": "Delete a single notification (soft delete). Users can only delete their own notifications. userId and tenantId are extracted from the JWT token. Returns 404 if notification not found or already deleted."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete All Notifications",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "description": "Required: JWT token for authenticated requests. userId and tenantId are extracted from the token."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/firebase/notifications",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "firebase", "notifications"]
+            },
+            "description": "Delete all notifications for the authenticated user (soft delete). userId and tenantId are extracted from the JWT token. Returns the count of deleted notifications."
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:4010",
+      "type": "string"
+    },
+    {
+      "key": "accessToken",
+      "value": "",
+      "type": "string",
+      "description": "JWT access token for authenticated requests"
+    }
+  ]
+}
