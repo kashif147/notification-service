@@ -28,6 +28,15 @@ async function fetchProfilesByUserIds(userIds, req = null) {
   }
 
   try {
+    logger.info(
+      {
+        userIdsCount: userIds.length,
+        userIds: userIds.slice(0, 5), // Log first 5 for debugging
+        profileServiceUrl,
+      },
+      "Fetching profiles from profile-service"
+    );
+
     const response = await axios.post(
       `${profileServiceUrl}/api/profile/internal/by-user-ids`,
       { userIds },
@@ -38,13 +47,29 @@ async function fetchProfilesByUserIds(userIds, req = null) {
     );
 
     if (response.data?.success && response.data?.data) {
+      logger.info(
+        {
+          profilesFound: Object.keys(response.data.data).length,
+          userIdsRequested: userIds.length,
+        },
+        "Profiles fetched successfully"
+      );
       return response.data.data;
     }
-    return {};
-  } catch (error) {
+    
     logger.warn(
       {
+        responseData: response.data,
+      },
+      "Profile service returned unexpected response format"
+    );
+    return {};
+  } catch (error) {
+    logger.error(
+      {
         error: error.message,
+        errorResponse: error.response?.data,
+        errorStatus: error.response?.status,
         userIdsCount: userIds.length,
         profileServiceUrl,
       },
