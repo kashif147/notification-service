@@ -3,6 +3,46 @@ const FCMToken = require("../models/fcmToken.model.js");
 const NotificationHistory = require("../models/notificationHistory.model.js");
 const mongoose = require("mongoose");
 const logger = require("../config/logger.js");
+const axios = require("axios");
+
+// Helper function to fetch profiles by user IDs from profile-service
+async function fetchProfilesByUserIds(userIds) {
+  if (!userIds || userIds.length === 0) {
+    return {};
+  }
+
+  const profileServiceUrl =
+    process.env.PROFILE_SERVICE_URL || "http://localhost:4000";
+
+  try {
+    const response = await axios.post(
+      `${profileServiceUrl}/api/profile/internal/by-user-ids`,
+      { userIds },
+      {
+        headers: {
+          "x-internal-request": "true",
+          "Content-Type": "application/json",
+        },
+        timeout: 5000, // 5 second timeout
+      }
+    );
+
+    if (response.data?.success && response.data?.data) {
+      return response.data.data;
+    }
+    return {};
+  } catch (error) {
+    logger.warn(
+      {
+        error: error.message,
+        userIdsCount: userIds.length,
+        profileServiceUrl,
+      },
+      "Failed to fetch profiles from profile-service, returning tokens without profile data"
+    );
+    return {};
+  }
+}
 
 const sendFirebaseNotification = {
   // Register/Update FCM token for a user
@@ -362,6 +402,18 @@ const sendFirebaseNotification = {
 
       const total = await FCMToken.countDocuments({ isActive: true });
 
+      // Extract unique userIds from tokens
+      const userIds = [...new Set(tokens.map((t) => t.userId).filter(Boolean))];
+
+      // Fetch profiles for these userIds
+      const profilesByUserId = await fetchProfilesByUserIds(userIds);
+
+      // Enrich tokens with profile data
+      const enrichedTokens = tokens.map((token) => ({
+        ...token,
+        profile: profilesByUserId[token.userId] || null,
+      }));
+
       logger.info(
         { count: tokens.length, page, limit, total },
         "Retrieved all active tokens"
@@ -371,7 +423,7 @@ const sendFirebaseNotification = {
         message: "Active tokens retrieved successfully",
         success: true,
         data: {
-          tokens,
+          tokens: enrichedTokens,
           pagination: {
             page: parseInt(page),
             limit: parseInt(limit),
@@ -446,6 +498,18 @@ const sendFirebaseNotification = {
 
       const total = await FCMToken.countDocuments(query);
 
+      // Extract unique userIds from tokens
+      const userIds = [...new Set(tokens.map((t) => t.userId).filter(Boolean))];
+
+      // Fetch profiles for these userIds
+      const profilesByUserId = await fetchProfilesByUserIds(userIds);
+
+      // Enrich tokens with profile data
+      const enrichedTokens = tokens.map((token) => ({
+        ...token,
+        profile: profilesByUserId[token.userId] || null,
+      }));
+
       logger.info(
         {
           filters: { tenantId, userId, platform, deviceId, isActive },
@@ -461,7 +525,7 @@ const sendFirebaseNotification = {
         message: "Filtered tokens retrieved successfully",
         success: true,
         data: {
-          tokens,
+          tokens: enrichedTokens,
           filters: {
             tenantId: tenantId || null,
             userId: userId || null,
