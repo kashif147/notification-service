@@ -6,7 +6,7 @@ const logger = require("../config/logger.js");
 const axios = require("axios");
 
 // Helper function to fetch profiles by user IDs from profile-service
-async function fetchProfilesByUserIds(userIds) {
+async function fetchProfilesByUserIds(userIds, req = null) {
   if (!userIds || userIds.length === 0) {
     return {};
   }
@@ -14,15 +14,25 @@ async function fetchProfilesByUserIds(userIds) {
   const profileServiceUrl =
     process.env.PROFILE_SERVICE_URL || "http://localhost:4000";
 
+  // Build headers - forward JWT token if available, otherwise use internal header
+  const headers = {
+    "Content-Type": "application/json",
+  };
+
+  // Forward Authorization header (JWT token) from original request if available
+  if (req && req.headers && req.headers.authorization) {
+    headers["Authorization"] = req.headers.authorization;
+  } else {
+    // Fallback to internal header if no JWT token available
+    headers["x-internal-request"] = "true";
+  }
+
   try {
     const response = await axios.post(
       `${profileServiceUrl}/api/profile/internal/by-user-ids`,
       { userIds },
       {
-        headers: {
-          "x-internal-request": "true",
-          "Content-Type": "application/json",
-        },
+        headers,
         timeout: 5000, // 5 second timeout
       }
     );
@@ -501,8 +511,8 @@ const sendFirebaseNotification = {
       // Extract unique userIds from tokens
       const userIds = [...new Set(tokens.map((t) => t.userId).filter(Boolean))];
 
-      // Fetch profiles for these userIds
-      const profilesByUserId = await fetchProfilesByUserIds(userIds);
+      // Fetch profiles for these userIds (forward JWT token from request)
+      const profilesByUserId = await fetchProfilesByUserIds(userIds, req);
 
       // Enrich tokens with profile data
       const enrichedTokens = tokens.map((token) => ({
