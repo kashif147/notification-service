@@ -23,6 +23,7 @@
   },
   "dependencies": {
     "@projectShell/rabbitmq-middleware": "github:kashif147/rabbitmq-middleware#gateway",
+    "@socket.io/redis-adapter": "^8.3.0",
     "amqplib": "^0.10.9",
     "axios": "^1.7.9",
     "body-parser": "^2.2.1",
@@ -33,10 +34,13 @@
     "express-rate-limit": "^7.4.0",
     "firebase-admin": "^13.6.0",
     "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.3",
     "mongoose": "^8.0.0",
     "pino": "^9.2.0",
     "pino-http": "^10.1.0",
-    "pino-pretty": "^13.1.1"
+    "pino-pretty": "^13.1.1",
+    "redis": "^5.10.0",
+    "socket.io": "^4.8.3"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"

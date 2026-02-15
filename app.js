@@ -78,6 +78,7 @@ const {
 const { mongooseConnection, disconnectDB } = require("./config/db.js");
 const bodyParser = require("body-parser");
 const firebaseRoutes = require("./routes/firebase.route.js");
+const notificationsRoutes = require("./routes/notifications.route.js");
 
 const app = express();
 
@@ -198,6 +199,7 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
 app.use("/api/firebase", firebaseRoutes);
+app.use("/api/notifications", notificationsRoutes);
 
 app.get("/health", (req, res) => {
   res.status(200).json({ status: "UP" });

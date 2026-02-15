@@ -1,141 +1,22 @@
 #!/usr/bin/env node
 
+const http = require("http");
+const { Server } = require("socket.io");
+const jwt = require("jsonwebtoken");
+
 const dotenvFlow = require("dotenv-flow");
-const fs = require("fs");
-const path = require("path");
+dotenvFlow.config();
 
-// Load .env files using dotenv-flow
-// Load .env.staging explicitly if it exists (even if NODE_ENV is not set to staging)
-const stagingEnvPath = path.join(__dirname, "..", ".env.staging");
-if (fs.existsSync(stagingEnvPath)) {
-  // Load staging environment
-  const result = dotenvFlow.config({ nodeEnv: "staging" });
-  console.log("✅ Loaded .env.staging file");
-  
-  // Fix for FIREBASE_SERVICE_ACCOUNT_JSON if it's malformed (only first character loaded)
-  // This handles cases where JSON is multi-line or improperly quoted
-  if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON && process.env.FIREBASE_SERVICE_ACCOUNT_JSON.length === 1) {
-    try {
-      // Read the file directly and manually parse FIREBASE_SERVICE_ACCOUNT_JSON
-      const fileContent = fs.readFileSync(stagingEnvPath, "utf8");
-      const lines = fileContent.split("\n");
-      
-      let firebaseJsonValue = "";
-      let capturing = false;
-      
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i].trim();
-        
-        if (line.startsWith("FIREBASE_SERVICE_ACCOUNT_JSON=")) {
-          // Extract the value after =
-          const valuePart = line.substring("FIREBASE_SERVICE_ACCOUNT_JSON=".length);
-          
-          // Handle different formats
-          if (valuePart.startsWith('"') && !valuePart.endsWith('"')) {
-            // Multi-line string starting with quote
-            capturing = true;
-            firebaseJsonValue = valuePart.substring(1); // Remove opening quote
-          } else if (valuePart.startsWith("'") && !valuePart.endsWith("'")) {
-            // Multi-line string starting with single quote
-            capturing = true;
-            firebaseJsonValue = valuePart.substring(1); // Remove opening quote
-          } else if (valuePart.startsWith("{") && !valuePart.endsWith("}")) {
-            // Multi-line JSON without quotes
-            capturing = true;
-            firebaseJsonValue = valuePart;
-          } else {
-            // Single line value - remove quotes if present
-            firebaseJsonValue = valuePart.replace(/^["']|["']$/g, "");
-            break;
-          }
-        } else if (capturing) {
-          // Continue capturing multi-line value
-          if (line.endsWith('"') || line.endsWith("'")) {
-            // End of multi-line string
-            firebaseJsonValue += "\n" + line.slice(0, -1); // Remove closing quote
-            capturing = false;
-            break;
-          } else if (line.endsWith("}") && firebaseJsonValue.includes("{")) {
-            // End of multi-line JSON
-            firebaseJsonValue += "\n" + line;
-            capturing = false;
-            break;
-          } else {
-            firebaseJsonValue += "\n" + line;
-          }
-        }
-      }
-      
-      if (firebaseJsonValue && firebaseJsonValue.length > 1) {
-        // Strip leading/trailing quotes if present
-        firebaseJsonValue = firebaseJsonValue.trim();
-        if (
-          (firebaseJsonValue.startsWith('"') && firebaseJsonValue.endsWith('"')) ||
-          (firebaseJsonValue.startsWith("'") && firebaseJsonValue.endsWith("'"))
-        ) {
-          firebaseJsonValue = firebaseJsonValue.slice(1, -1);
-        }
-        
-        // Validate it's valid JSON before setting
-        try {
-          JSON.parse(firebaseJsonValue);
-          process.env.FIREBASE_SERVICE_ACCOUNT_JSON = firebaseJsonValue;
-          console.log(`✅ Fixed FIREBASE_SERVICE_ACCOUNT_JSON (new length: ${firebaseJsonValue.length})`);
-        } catch (e) {
-          console.log(`⚠️  Could not fix FIREBASE_SERVICE_ACCOUNT_JSON: ${e.message}`);
-        }
-      }
-    } catch (e) {
-      console.log(`⚠️  Error trying to fix FIREBASE_SERVICE_ACCOUNT_JSON: ${e.message}`);
-    }
-  }
-  
-  // Also try loading directly using dotenv for additional compatibility
-  try {
-    require("dotenv").config({ path: stagingEnvPath, override: false });
-  } catch (e) {
-    // Ignore if dotenv is not available, we'll use dotenv-flow
-  }
-} else {
-  // Load default dotenv files
-  dotenvFlow.config();
-}
+const NotificationHistory = require("../models/notificationHistory.model");
 
-// Debug: Check if FIREBASE_SERVICE_ACCOUNT_JSON is set
-const firebaseEnvVar = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
-if (firebaseEnvVar) {
-  const envVarLength = firebaseEnvVar.length;
-  console.log(`✅ FIREBASE_SERVICE_ACCOUNT_JSON found (length: ${envVarLength})`);
-  // Show actual value for debugging (this will help identify the issue)
-  if (envVarLength <= 200) {
-    console.log(`   Actual value: "${firebaseEnvVar}"`);
-  } else {
-    console.log(`   Preview (first 100): ${firebaseEnvVar.substring(0, 100)}...`);
-  }
-  
-  // Try to validate it's valid JSON
-  try {
-    const parsed = JSON.parse(firebaseEnvVar);
-    if (parsed.project_id) {
-      console.log(`✅ FIREBASE_SERVICE_ACCOUNT_JSON is valid JSON (project_id: ${parsed.project_id})`);
-    } else {
-      console.log(`⚠️  FIREBASE_SERVICE_ACCOUNT_JSON is valid JSON but missing project_id`);
-    }
-  } catch (e) {
-    console.log(`⚠️  FIREBASE_SERVICE_ACCOUNT_JSON is not valid JSON: ${e.message}`);
-    console.log(`   Full value: ${firebaseEnvVar}`);
-  }
-} else {
-  console.log("⚠️  FIREBASE_SERVICE_ACCOUNT_JSON not found in environment");
-  // List all FIREBASE-related env vars to help debug
-  const firebaseKeys = Object.keys(process.env).filter((k) =>
-    k.toUpperCase().includes("FIREBASE")
-  );
-  if (firebaseKeys.length > 0) {
-    console.log(`Found FIREBASE-related env vars: ${firebaseKeys.join(", ")}`);
-  }
-}
-const { shutdownEventSystem } = require("../rabbitMQ/index.js");
+const {
+  shutdownEventSystem,
+  setSocketIO,
+  setOnlineUsers,
+  initEventSystem,
+  setupConsumers,
+} = require("../rabbitMQ");
+
 const { disconnectDB } = require("../config/db.js");
 const logger = require("../config/logger.js");
 const app = require("../app.js");
@@ -144,8 +25,111 @@ let server;
 
 async function start() {
   const port = Number(process.env.PORT || 4010);
-  server = app.listen(port, () => {
-    logger.info({ port }, "API listening");
+
+  const httpServer = http.createServer(app);
+
+  const io = new Server(httpServer, {
+    cors: {
+      origin: "*",
+      methods: ["GET", "POST"],
+    },
+  });
+
+  const onlineUsers = new Map(); // tenant:user -> Set(socketIds)
+
+  // JWT auth
+  io.use((socket, next) => {
+    try {
+      const token = socket.handshake.auth?.token;
+      if (!token) return next(new Error("Unauthorized"));
+
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+      socket.user = {
+        userId: decoded.id,
+        tenantId: decoded.tenantId,
+      };
+
+      next();
+    } catch (err) {
+      next(new Error("Invalid token"));
+    }
+  });
+
+  io.on("connection", async (socket) => {
+    try {
+      const { userId, tenantId } = socket.user;
+      const userKey = `${tenantId}:${userId}`;
+
+      socket.join(`tenant:${tenantId}`);
+      socket.join(`user:${userId}`);
+
+      if (!onlineUsers.has(userKey)) {
+        onlineUsers.set(userKey, new Set());
+      }
+
+      onlineUsers.get(userKey).add(socket.id);
+
+      logger.info({ userKey }, "Socket connected");
+
+      // 🔹 Emit unread count on connect
+      const unreadCount = await NotificationHistory.countDocuments({
+        tenantId,
+        userId,
+        isRead: false,
+      });
+
+      socket.emit("unreadCount", { count: unreadCount });
+
+      // 🔹 Listen for mark single notification as read
+      socket.on("markAsRead", async ({ notificationId }) => {
+        const notification = await NotificationHistory.findOneAndUpdate(
+          { _id: notificationId, tenantId, userId },
+          { isRead: true, readAt: new Date() },
+          { new: true },
+        );
+
+        if (notification) {
+          io.to(`user:${userId}`).emit("badgeDecrement", { count: 1 });
+        }
+      });
+
+      // 🔹 Listen for mark all as read
+      socket.on("markAllAsRead", async () => {
+        await NotificationHistory.updateMany(
+          { tenantId, userId, isRead: false },
+          { isRead: true, readAt: new Date() },
+        );
+
+        io.to(`user:${userId}`).emit("badgeReset");
+      });
+
+      socket.on("disconnect", () => {
+        const userSockets = onlineUsers.get(userKey);
+        if (userSockets) {
+          userSockets.delete(socket.id);
+          if (userSockets.size === 0) {
+            onlineUsers.delete(userKey);
+          }
+        }
+        logger.info({ userKey }, "Socket disconnected");
+      });
+    } catch (err) {
+      logger.error({ err }, "Socket connection error");
+    }
+  });
+
+  // Inject into Rabbit layer
+  setSocketIO(io);
+  setOnlineUsers(onlineUsers);
+
+  await initEventSystem();
+  await setupConsumers();
+
+  logger.info("RabbitMQ initialized and consumers registered");
+
+  server = httpServer.listen(port, () => {
+    logger.info({ port }, "API + Socket.IO listening");
   });
 }
 

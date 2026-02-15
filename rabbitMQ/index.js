@@ -1,3 +1,25 @@
+// implementing socket.io for real-time communication
+let ioInstance = null;
+
+function setSocketIO(io) {
+  ioInstance = io;
+}
+
+function getSocketIO() {
+  return ioInstance;
+}
+
+let onlineUsersInstance = null;
+
+function setOnlineUsers(map) {
+  onlineUsersInstance = map;
+}
+
+function getOnlineUsers() {
+  return onlineUsersInstance;
+}
+
+//--------------------------------
 // Main RabbitMQ module exports - Now using shared middleware
 const {
   init,
@@ -44,12 +66,12 @@ async function publishDomainEvent(eventType, data, metadata = {}) {
   if (result.success) {
     logger.info(
       { eventType, eventId: result.eventId },
-      "Domain event published"
+      "Domain event published",
     );
   } else {
     logger.error(
       { eventType, error: result.error },
-      "Failed to publish domain event"
+      "Failed to publish domain event",
     );
   }
 
@@ -61,26 +83,33 @@ async function setupConsumers() {
   try {
     logger.info("Setting up RabbitMQ consumers...");
 
-    // TODO: Add your notification event consumers here
-    // Example:
-    // const NOTIFICATION_QUEUE = "notification.events";
-    // await consumer.createQueue(NOTIFICATION_QUEUE, {
-    //   durable: true,
-    //   messageTtl: 3600000, // 1 hour
-    // });
-    // 
-    // await consumer.bindQueue(NOTIFICATION_QUEUE, "user.events", [
-    //   "user.created",
-    //   "user.updated",
-    // ]);
-    //
-    // consumer.registerHandler("user.created", async (payload, context) => {
-    //   // Handle user created event
-    //   logger.info({ payload }, "User created event received");
-    // });
-    //
-    // await consumer.consume(NOTIFICATION_QUEUE, { prefetch: 10 });
-    // logger.info("Notification events consumer ready", { queue: NOTIFICATION_QUEUE });
+    const NOTIFICATION_QUEUE = "notification.events";
+
+    // 1. Create queue
+    await consumer.createQueue(NOTIFICATION_QUEUE, {
+      durable: true,
+      messageTtl: 3600000, // 1 hour (optional)
+    });
+
+    // 2. Bind queue to exchange + routing keys
+    await consumer.bindQueue(NOTIFICATION_QUEUE, "batch.events", [
+      "batch.completed",
+    ]);
+
+    // 3. Import listener
+    const batchCompletedListener = require("./listeners/batchCompleted.listener");
+
+    // 4. Register handler
+    consumer.registerHandler("batch.completed", async (payload, context) => {
+      await batchCompletedListener(payload, context);
+    });
+
+    // 5. Start consuming
+    await consumer.consume(NOTIFICATION_QUEUE, { prefetch: 10 });
+
+    logger.info("Notification events consumer ready", {
+      queue: NOTIFICATION_QUEUE,
+    });
 
     logger.info("All consumers set up successfully");
   } catch (error) {
@@ -102,7 +131,7 @@ async function shutdownEventSystem() {
   } catch (error) {
     logger.error(
       { error: error.message },
-      "Error during event system shutdown"
+      "Error during event system shutdown",
     );
   }
 }
@@ -118,4 +147,8 @@ module.exports = {
   shutdownEventSystem,
   publishDomainEvent,
   EVENT_TYPES,
+  setSocketIO,
+  getSocketIO,
+  setOnlineUsers,
+  getOnlineUsers,
 };
