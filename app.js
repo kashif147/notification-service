@@ -70,11 +70,6 @@ const loggerMiddleware = require("./middlewares/logger.mw.js");
 const responseMiddleware = require("./middlewares/response.mw.js");
 const notFound = require("./middlewares/notFound.js");
 const errorHandler = require("./middlewares/errorHandler.js");
-const {
-  initEventSystem,
-  setupConsumers,
-  shutdownEventSystem,
-} = require("./rabbitMQ/index.js");
 const { mongooseConnection, disconnectDB } = require("./config/db.js");
 const bodyParser = require("body-parser");
 const firebaseRoutes = require("./routes/firebase.route.js");
@@ -85,8 +80,6 @@ const app = express();
 // Disable Express automatic ETag generation (304 responses)
 app.set("etag", false);
 
-// Initialize event system - Now using middleware
-let eventSystemInitialized = false;
 let databaseInitialized = false;
 
 async function initializeDatabase() {
@@ -108,36 +101,12 @@ async function initializeDatabase() {
   }
 }
 
-async function initializeEventSystem() {
-  if (!process.env.RABBIT_URL) {
-    logger.warn("RABBIT_URL not configured, skipping RabbitMQ initialization");
-    return;
-  }
-
-  try {
-    logger.info("RabbitMQ URL configured, initializing with middleware...");
-    await initEventSystem();
-    await setupConsumers();
-    eventSystemInitialized = true;
-    logger.info("Event system initialized successfully with middleware");
-  } catch (error) {
-    logger.warn(
-      { error: error.message },
-      "Event system initialization failed, continuing without messaging"
-    );
-  }
-}
-
-// Initialize database and event system on startup
+// Initialize database on startup (event system is initialized in bin/notification-service.js)
 initializeDatabase();
-initializeEventSystem();
 
-// Graceful shutdown
+// Graceful shutdown (event system shutdown is handled in bin/notification-service.js)
 process.on("SIGTERM", async () => {
   logger.info("SIGTERM received, shutting down gracefully...");
-  if (eventSystemInitialized) {
-    await shutdownEventSystem();
-  }
   if (databaseInitialized) {
     await disconnectDB();
   }
@@ -146,9 +115,6 @@ process.on("SIGTERM", async () => {
 
 process.on("SIGINT", async () => {
   logger.info("SIGINT received, shutting down gracefully...");
-  if (eventSystemInitialized) {
-    await shutdownEventSystem();
-  }
   if (databaseInitialized) {
     await disconnectDB();
   }
@@ -207,8 +173,8 @@ app.get("/health", (req, res) => {
 
 app.get("/health/events", (req, res) => {
   res.success({
-    status: eventSystemInitialized ? "healthy" : "initializing",
-    initialized: eventSystemInitialized,
+    status: "delegated",
+    message: "Event system is initialized in process entry point (bin)",
     timestamp: new Date().toISOString(),
   });
 });
