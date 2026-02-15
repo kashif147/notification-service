@@ -19,7 +19,7 @@ const FCMTokenSchema = new mongoose.Schema(
       type: String,
       required: true,
       unique: true,
-      index: true,
+      // index: true,
     },
     // Device identifier (optional, for tracking multiple devices per user)
     deviceId: {
@@ -47,7 +47,7 @@ const FCMTokenSchema = new mongoose.Schema(
   },
   {
     timestamps: true, // Adds createdAt and updatedAt
-  }
+  },
 );
 
 // Compound indexes for efficient queries
@@ -62,4 +62,3 @@ FCMTokenSchema.pre("save", function (next) {
 });
 
 module.exports = mongoose.model("FCMToken", FCMTokenSchema);
-
