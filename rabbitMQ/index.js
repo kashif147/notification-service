@@ -92,7 +92,7 @@ async function setupConsumers() {
     });
 
     // 2. Bind queue to exchange + routing keys
-    await consumer.bindQueue(NOTIFICATION_QUEUE, "portal.events", [
+    await consumer.bindQueue(NOTIFICATION_QUEUE, "batch.events", [
       "batch.completed",
     ]);
 
