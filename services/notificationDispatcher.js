@@ -36,9 +36,17 @@ async function dispatchNotification(event, io, onlineUsers) {
 
   const isOnline = onlineUsers?.has(userKey);
 
-  // 2. If online → emit real-time
+  // 2. If online → emit real-time (normalized shape for API/Socket consistency)
   if (isOnline && io) {
-    io.to(`user:${userId}`).emit("notification", notification);
+    const payload = {
+      _id: notification._id,
+      title: notification.title,
+      body: notification.body,
+      isRead: !!notification.isRead,
+      createdAt: notification.createdAt,
+      metadata: notification.metadata || {},
+    };
+    io.to(`user:${userId}`).emit("notification", payload);
     io.to(`user:${userId}`).emit("badgeIncrement", { count: 1 });
 
     notification.status = "delivered";
@@ -60,6 +68,7 @@ async function dispatchNotification(event, io, onlineUsers) {
         title,
         body,
         tokenDoc.fcmToken,
+        notification._id,
       );
 
       notification.status = "sent";

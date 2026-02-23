@@ -18,18 +18,26 @@ router.get(
         tenantId,
         userId,
       })
-        .select("_id title body isRead createdAt")
+        .select("_id title body isRead createdAt metadata")
         .sort({ createdAt: -1 })
         .limit(limit)
         .lean();
+      const unreadCount = await NotificationHistory.countDocuments({
+        tenantId,
+        userId,
+        isRead: false,
+      });
       const list = notifications.map((n) => ({
         _id: n._id,
         title: n.title,
         body: n.body,
         isRead: !!n.isRead,
         createdAt: n.createdAt,
+        metadata: n.metadata || {},
       }));
-      res.status(200).json(list);
+      res.status(200).json({
+        data: { notifications: list, unreadCount },
+      });
     } catch (err) {
       res.status(500).json({ message: err.message || "Error fetching notifications" });
     }
