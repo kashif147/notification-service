@@ -111,6 +111,25 @@ async function setupConsumers() {
       queue: NOTIFICATION_QUEUE,
     });
 
+    // Membership events: application approved + subscription created
+    const SUBSCRIPTION_CURRENT_UPDATED = "members.subscription.current.updated.v1";
+    const MEMBERSHIP_QUEUE = "notification-service.membership.events";
+
+    await consumer.createQueue(MEMBERSHIP_QUEUE, {
+      durable: true,
+      messageTtl: 3600000,
+    });
+
+    await consumer.bindQueue(MEMBERSHIP_QUEUE, "membership.events", [
+      SUBSCRIPTION_CURRENT_UPDATED,
+    ]);
+
+    const subscriptionCreatedListener = require("./listeners/subscriptionCreated.listener");
+    consumer.registerHandler(SUBSCRIPTION_CURRENT_UPDATED, subscriptionCreatedListener);
+    await consumer.consume(MEMBERSHIP_QUEUE, { prefetch: 10 });
+
+    logger.info("Membership events consumer ready", { queue: MEMBERSHIP_QUEUE });
+
     logger.info("All consumers set up successfully");
   } catch (error) {
     logger.error({ error: error.message }, "Failed to set up consumers");
