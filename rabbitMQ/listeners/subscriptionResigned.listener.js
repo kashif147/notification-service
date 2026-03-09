@@ -3,14 +3,16 @@ const { getSocketIO, getOnlineUsers } = require("../index");
 const logger = require("../../config/logger.js");
 
 module.exports = async function handleSubscriptionResigned(payload) {
+  logger.info({ eventType: "SUBSCRIPTION_RESIGNED", payload }, "subscriptionResigned handler invoked");
+
   const data = payload?.data || payload;
   const tenantId = data?.tenantId ?? payload?.tenantId;
   const userId = data?.userId;
 
   if (!userId || !tenantId) {
-    logger.debug(
+    logger.info(
       { userId, tenantId },
-      "Skipping notification: userId or tenantId missing (e.g. CRM-only, no portal user)"
+      "subscriptionResigned: Skipping notification - userId or tenantId missing (e.g. CRM-only, no portal user)"
     );
     return;
   }

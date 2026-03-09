@@ -3,14 +3,16 @@ const { getSocketIO, getOnlineUsers } = require("../index");
 const logger = require("../../config/logger.js");
 
 module.exports = async function handleSubscriptionResignationUndone(payload) {
+  logger.info({ eventType: "SUBSCRIPTION_RESIGNATION_UNDONE", payload }, "subscriptionResignationUndone handler invoked");
+
   const data = payload?.data || payload;
   const tenantId = data?.tenantId ?? payload?.tenantId;
   const userId = data?.userId;
 
   if (!userId || !tenantId) {
-    logger.debug(
+    logger.info(
       { userId, tenantId },
-      "Skipping notification: userId or tenantId missing"
+      "subscriptionResignationUndone: Skipping notification - userId or tenantId missing"
     );
     return;
   }
