@@ -355,6 +355,26 @@ function hasRole(userRoles, requiredRole) {
  * Tenant Enforcement Middleware
  * Ensures tenantId is present in req.ctx
  */
+/** CRM-only routes (e.g. tenant-wide notification admin). Run after authenticate. */
+const requireCrmUser = (req, res, next) => {
+  const userType = req.user?.userType || req.ctx?.userType;
+  if (userType !== "CRM") {
+    return res.status(403).json({
+      status: "fail",
+      message: "Access denied. CRM users only.",
+      timestamp: new Date().toISOString(),
+    });
+  }
+  if (!req.tenantId && !req.ctx?.tenantId) {
+    return res.status(400).json({
+      status: "fail",
+      message: "Tenant context required",
+      timestamp: new Date().toISOString(),
+    });
+  }
+  return next();
+};
+
 const requireTenant = (req, res, next) => {
   if (!req.ctx || !req.ctx.tenantId) {
     const authError = AppError.badRequest("Tenant context required", {
@@ -396,6 +416,7 @@ module.exports = {
 
   // Tenant enforcement (authentication context, not authorization)
   requireTenant,
+  requireCrmUser,
 
   // Utility functions
   hasRole,

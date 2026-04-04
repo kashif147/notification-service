@@ -137,6 +137,31 @@ async function setupConsumers() {
 
     logger.info("Membership events consumer ready", { queue: MEMBERSHIP_QUEUE });
 
+    const APPLICATION_REVIEW_QUEUE = "notification-service.application.events";
+    const APP_REVIEW_APPROVED = "applications.review.approved.v1";
+    const APP_REVIEW_REJECTED = "applications.review.rejected.v1";
+
+    await consumer.createQueue(APPLICATION_REVIEW_QUEUE, {
+      durable: true,
+      messageTtl: 3600000,
+    });
+
+    await consumer.bindQueue(APPLICATION_REVIEW_QUEUE, "application.events", [
+      APP_REVIEW_APPROVED,
+      APP_REVIEW_REJECTED,
+    ]);
+
+    const applicationReviewApprovedListener = require("./listeners/applicationReviewApproved.listener");
+    const applicationReviewRejectedListener = require("./listeners/applicationReviewRejected.listener");
+
+    consumer.registerHandler(APP_REVIEW_APPROVED, applicationReviewApprovedListener);
+    consumer.registerHandler(APP_REVIEW_REJECTED, applicationReviewRejectedListener);
+    await consumer.consume(APPLICATION_REVIEW_QUEUE, { prefetch: 10 });
+
+    logger.info("Application review events consumer ready", {
+      queue: APPLICATION_REVIEW_QUEUE,
+    });
+
     logger.info("All consumers set up successfully");
   } catch (error) {
     logger.error({ error: error.message }, "Failed to set up consumers");

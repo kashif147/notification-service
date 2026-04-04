@@ -1,0 +1,91 @@
+{
+  "info": {
+    "name": "Notification Service API",
+    "description": "Latest API collection for notification-service",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:4010", "type": "string" },
+    { "key": "authToken", "value": "", "type": "string" },
+    { "key": "notificationId", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Firebase",
+      "item": [
+        {
+          "name": "Register Token",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/firebase/register-token", "host": ["{{baseUrl}}"], "path": ["api", "firebase", "register-token"] },
+            "body": { "mode": "raw", "raw": "{\n  \"token\": \"device-token\"\n}" }
+          }
+        },
+        {
+          "name": "Unregister Token",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/firebase/unregister-token", "host": ["{{baseUrl}}"], "path": ["api", "firebase", "unregister-token"] },
+            "body": { "mode": "raw", "raw": "{\n  \"token\": \"device-token\"\n}" }
+          }
+        },
+        {
+          "name": "Get Active Tokens",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/firebase/tokens", "host": ["{{baseUrl}}"], "path": ["api", "firebase", "tokens"] }
+          }
+        },
+        {
+          "name": "Send Notification",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/firebase/send-notification", "host": ["{{baseUrl}}"], "path": ["api", "firebase", "send-notification"] },
+            "body": { "mode": "raw", "raw": "{\n  \"title\": \"Test\",\n  \"body\": \"Message\"\n}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Notifications",
+      "item": [
+        {
+          "name": "Get My Notifications",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/notifications", "host": ["{{baseUrl}}"], "path": ["api", "notifications"] }
+          }
+        },
+        {
+          "name": "Mark As Read",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/firebase/notifications/mark-read", "host": ["{{baseUrl}}"], "path": ["api", "firebase", "notifications", "mark-read"] },
+            "body": { "mode": "raw", "raw": "{\n  \"notificationId\": \"{{notificationId}}\"\n}" }
+          }
+        },
+        {
+          "name": "Delete Notification",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/firebase/notifications/{{notificationId}}", "host": ["{{baseUrl}}"], "path": ["api", "firebase", "notifications", "{{notificationId}}"] }
+          }
+        },
+        {
+          "name": "Delete All Notifications",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/firebase/notifications", "host": ["{{baseUrl}}"], "path": ["api", "firebase", "notifications"] }
+          }
+        }
+      ]
+    }
+  ]
+}
