@@ -17,6 +17,7 @@ router.get(
       const notifications = await NotificationHistory.find({
         tenantId,
         userId,
+        deletedAt: null,
       })
         .select("_id title body isRead createdAt metadata")
         .sort({ createdAt: -1 })
@@ -26,6 +27,7 @@ router.get(
         tenantId,
         userId,
         isRead: false,
+        deletedAt: null,
       });
       const list = notifications.map((n) => ({
         _id: n._id,
