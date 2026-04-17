@@ -15,7 +15,9 @@ module.exports = async function handleBatchProcessCompleted(payload) {
   const isFailed = status === "failed";
   const batchName = String(data.batchName || "").trim() || "Batch";
   const totalTransactions = Number(data.totalTransactions || 0);
-  const title = `${batchName} (${totalTransactions})`;
+  const title = isFailed
+    ? `Batch ${batchName} has failed.`
+    : `Batch ${batchName} is completed.`;
   const body = isFailed ? "Batch processing failed." : "Batch processing completed.";
 
   await dispatchNotification(

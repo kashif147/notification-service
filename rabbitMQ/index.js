@@ -94,12 +94,14 @@ async function setupConsumers() {
     // 2. Bind queue to exchange + routing keys
     await consumer.bindQueue(NOTIFICATION_QUEUE, "batch.events", [
       "batch.completed",
+      "batch.process.queued.v1",
       "batch.process.progress.v1",
       "batch.process.completed.v1",
     ]);
 
     // 3. Import listener
     const batchCompletedListener = require("./listeners/batchCompleted.listener");
+    const batchProcessQueuedListener = require("./listeners/batchProcessQueued.listener");
     const batchProcessProgressListener = require("./listeners/batchProcessProgress.listener");
     const batchProcessCompletedListener = require("./listeners/batchProcessCompleted.listener");
 
@@ -109,6 +111,9 @@ async function setupConsumers() {
     });
     consumer.registerHandler("batch.process.progress.v1", async (payload, context) => {
       await batchProcessProgressListener(payload, context);
+    });
+    consumer.registerHandler("batch.process.queued.v1", async (payload, context) => {
+      await batchProcessQueuedListener(payload, context);
     });
     consumer.registerHandler("batch.process.completed.v1", async (payload, context) => {
       await batchProcessCompletedListener(payload, context);
