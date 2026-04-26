@@ -2,7 +2,10 @@ const admin = require("../util/firebase");
 const logger = require("../config/logger.js");
 
 const notificationService = {
-  sendNotification: async (title, body, fcmToken, notificationId = null) => {
+  /**
+   * @param {Record<string, string>} [dataPayload] FCM `data` map — values must be strings; keep small.
+   */
+  sendNotification: async (title, body, fcmToken, notificationId = null, dataPayload = null) => {
     // Verify Firebase is initialized
     if (admin.apps.length === 0) {
       const error = new Error(
@@ -18,15 +21,20 @@ const notificationService = {
     // Firebase Admin SDK requires 'token' property in message object
     // We use fcmToken variable name to avoid confusion with JWT tokens
     // data.notificationId enables client deduplication with Socket.IO (same _id)
+    const baseData = notificationId
+      ? { notificationId: String(notificationId) }
+      : {};
+    const extra =
+      dataPayload && typeof dataPayload === "object" ? { ...dataPayload } : {};
+    const data = { ...baseData, ...extra };
+
     const message = {
       token: fcmToken,
       notification: {
         title: title,
         body: body,
       },
-      ...(notificationId && {
-        data: { notificationId: String(notificationId) },
-      }),
+      ...(Object.keys(data).length > 0 && { data }),
     };
 
     try {

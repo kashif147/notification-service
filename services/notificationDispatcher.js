@@ -17,6 +17,9 @@
 const NotificationHistory = require("../models/notificationHistory.model");
 const FCMToken = require("../models/fcmToken.model");
 const notificationService = require("./notificationService");
+const {
+  metadataHasAttachmentPayload,
+} = require("../helpers/notificationAttachmentMetadata.js");
 
 async function dispatchNotification(event, io, onlineUsers) {
   const { tenantId, userId, title, body, metadata = {} } = event;
@@ -62,6 +65,9 @@ async function dispatchNotification(event, io, onlineUsers) {
     isActive: true,
   });
 
+  const fcmData =
+    metadataHasAttachmentPayload(metadata) ? { hasAttachments: "true" } : null;
+
   for (const tokenDoc of tokens) {
     try {
       const response = await notificationService.sendNotification(
@@ -69,6 +75,7 @@ async function dispatchNotification(event, io, onlineUsers) {
         body,
         tokenDoc.fcmToken,
         notification._id,
+        fcmData,
       );
 
       notification.status = "sent";
