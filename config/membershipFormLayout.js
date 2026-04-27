@@ -32,17 +32,39 @@ function sboLayout() {
   };
 }
 
-function sd19Layout() {
+/**
+ * SD19 fallback layout — used only if pdf.js cannot read underscore segments (rare).
+ * Prefer automatic detection in sd19LayoutDetect.js.
+ */
+function sd19LayoutFallback() {
+  const pageW = 595.32;
+  const margin = 28;
+  const defaultFullWidthRight = pageW - margin;
+
   return {
+    name: {
+      lineLeft: numEnv("FORM_SD19_NAME_LINE_LEFT", 118),
+      lineRight: numEnv("FORM_SD19_NAME_LINE_RIGHT", defaultFullWidthRight),
+      y: numEnv("FORM_SD19_NAME_LINE_Y", 704),
+      size: numEnv("FORM_SD19_NAME_SIZE", 10),
+    },
+    employedAt: {
+      lineLeft: numEnv("FORM_SD19_EMPLOYED_LINE_LEFT", 118),
+      lineRight: numEnv("FORM_SD19_EMPLOYED_LINE_RIGHT", defaultFullWidthRight),
+      y: numEnv("FORM_SD19_EMPLOYED_LINE_Y", 676),
+      size: numEnv("FORM_SD19_EMPLOYED_SIZE", 10),
+    },
     inmo: {
-      x: numEnv("FORM_SD19_INMO_X", 200),
-      y: numEnv("FORM_SD19_INMO_Y", 688),
-      size: numEnv("FORM_SD19_INMO_SIZE", 9),
+      lineLeft: numEnv("FORM_SD19_INMO_LINE_LEFT", 132),
+      lineRight: numEnv("FORM_SD19_INMO_LINE_RIGHT", 420),
+      y: numEnv("FORM_SD19_INMO_LINE_Y", 408),
+      size: numEnv("FORM_SD19_INMO_SIZE", 10),
     },
     payroll: {
-      x: numEnv("FORM_SD19_PAYROLL_X", 400),
-      y: numEnv("FORM_SD19_PAYROLL_Y", 688),
-      size: numEnv("FORM_SD19_PAYROLL_SIZE", 9),
+      lineLeft: numEnv("FORM_SD19_PAYROLL_LINE_LEFT", 132),
+      lineRight: numEnv("FORM_SD19_PAYROLL_LINE_RIGHT", 420),
+      y: numEnv("FORM_SD19_PAYROLL_LINE_Y", 376),
+      size: numEnv("FORM_SD19_PAYROLL_SIZE", 10),
     },
   };
 }
@@ -50,5 +72,5 @@ function sd19Layout() {
 module.exports = {
   paths,
   sboLayout,
-  sd19Layout,
+  sd19LayoutFallback,
 };

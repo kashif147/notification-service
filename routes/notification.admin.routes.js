@@ -25,4 +25,9 @@ router.delete(
   notificationFilterTemplateController.deleteTemplate
 );
 
+/** Fixed path — use when proxy/gateway does not forward `/admin/:id` */
+router.get("/preview", notificationAdminController.getNotificationAdminById);
+
+router.get("/:id", notificationAdminController.getNotificationAdminById);
+
 module.exports = router;

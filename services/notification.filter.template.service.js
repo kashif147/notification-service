@@ -58,7 +58,7 @@ class NotificationFilterTemplateService {
       userId,
       "meta.deleted": false,
       ...typeFilter,
-    }).sort({ pinned: -1, isDefault: -1, createdAt: -1 });
+    }).sort({ isDefault: -1, createdAt: -1 });
 
     const allTemplates = [];
     if (systemDefault) allTemplates.push(systemDefault);

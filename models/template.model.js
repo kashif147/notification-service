@@ -31,14 +31,17 @@ const TemplateSchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
+    /** User’s default view — the only “default view” product flag. */
     isDefault: {
       type: Boolean,
       default: false,
     },
+    /** Legacy; unused in UI. */
     pinned: {
       type: Boolean,
       default: false,
     },
+    /** Seeded system template document — not the same as isDefault. */
     systemDefault: {
       type: Boolean,
       default: false,

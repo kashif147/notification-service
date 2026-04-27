@@ -10,6 +10,36 @@ function normalizePaymentType(t) {
   return String(t).trim();
 }
 
+function resolveMemberFullName(effective) {
+  const pi = effective?.personalInfo;
+  if (!pi || typeof pi !== "object") return "";
+  if (typeof pi.fullName === "string" && pi.fullName.trim()) {
+    return pi.fullName.trim();
+  }
+  const f = typeof pi.forename === "string" ? pi.forename.trim() : "";
+  const s = typeof pi.surname === "string" ? pi.surname.trim() : "";
+  return [f, s].filter(Boolean).join(" ").trim();
+}
+
+function resolveWorkLocation(effective) {
+  const pd = effective?.professionalDetails;
+  if (!pd || typeof pd !== "object") return "";
+  const wl =
+    pd.workLocation != null ? String(pd.workLocation).trim() : "";
+  if (wl) return wl;
+  const ow =
+    pd.otherWorkLocation != null ? String(pd.otherWorkLocation).trim() : "";
+  return ow;
+}
+
+/** Membership category label from subscription details (e.g. application-approved payload). */
+function resolveMembershipCategory(effective) {
+  const raw = effective?.subscriptionDetails?.membershipCategory;
+  if (raw == null) return "";
+  const s = String(raw).trim();
+  return s;
+}
+
 function formKindForPayment(paymentType) {
   const p = normalizePaymentType(paymentType).toLowerCase();
   if (p === "standing order") return "SBO";
@@ -57,6 +87,10 @@ module.exports = async function handleApplicationReviewApproved(payload) {
         pdfBuffer = await buildPrefilledMembershipFormPdf(formKind, {
           memberId: String(memberId),
           payrollNo,
+          memberFullName:
+            formKind === "SD19" ? resolveMemberFullName(effective) : "",
+          workLocation:
+            formKind === "SD19" ? resolveWorkLocation(effective) : "",
         });
         const filename =
           formKind === "SBO"
@@ -88,16 +122,29 @@ module.exports = async function handleApplicationReviewApproved(payload) {
         ? "salary deduction"
         : null;
 
-  const bodyWithForm =
-    attachment && formLabel
-      ? `Your membership application has been approved. Your prefilled ${formLabel} form is attached — open the notification to download the PDF.`
-      : "Your membership application has been approved.";
+  let bodyWithForm;
+  if (formKind === "SD19") {
+    const categorySegment = resolveMembershipCategory(effective);
+    const beforeMembership = categorySegment
+      ? `${categorySegment} `
+      : "";
+    bodyWithForm = `You chose to pay by Salary Deduction for your ${beforeMembership}membership. Please download, print, sign, and return your form or submit it directly via your membership companion mobile App`;
+  } else if (attachment && formLabel) {
+    bodyWithForm = `Your membership application has been approved. Your prefilled ${formLabel} form is attached — open the notification to download the PDF.`;
+  } else {
+    bodyWithForm = "Your membership application has been approved.";
+  }
+
+  const notificationTitle =
+    formKind === "SD19"
+      ? "Submit Salary Deduction Form"
+      : "Application approved";
 
   await dispatchNotification(
     {
       tenantId,
       userId,
-      title: "Application approved",
+      title: notificationTitle,
       body: bodyWithForm,
       metadata: {
         type: "APPLICATION_REVIEW_APPROVED",
