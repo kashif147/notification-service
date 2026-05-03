@@ -30,6 +30,8 @@ const {
 } = require("@projectShell/rabbitmq-middleware");
 
 const logger = require("../config/logger.js");
+const bizLogger = require("../config/bizLogger.js");
+const { createRabbitStructuredLogHandlers } = require("@projectShell/logging-lib");
 
 // Re-export for convenience
 const EVENT_TYPES = MIDDLEWARE_EVENT_TYPES;
@@ -40,6 +42,7 @@ async function initEventSystem() {
     await init({
       url: process.env.RABBIT_URL,
       logger: logger,
+      structuredLog: createRabbitStructuredLogHandlers(bizLogger),
       prefetch: 10,
       connectionName: "notification-service",
       serviceName: "notification-service",

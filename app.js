@@ -65,6 +65,12 @@ const helmet = require("helmet");
 const { corsMiddleware } = require("./config/cors.js");
 const { limiterGeneral } = require("./config/rateLimiters.js");
 const logger = require("./config/logger.js");
+const bizLogger = require("./config/bizLogger.js");
+const {
+  correlationIdMiddleware,
+  logErrorMiddleware,
+  createSystemLogsRouter,
+} = require("@projectShell/logging-lib");
 const requestId = require("./middlewares/requestId.js");
 const loggerMiddleware = require("./middlewares/logger.mw.js");
 const responseMiddleware = require("./middlewares/response.mw.js");
@@ -158,6 +164,9 @@ app.use(
   express.urlencoded({ extended: true, limit: "200mb", parameterLimit: 100 })
 );
 
+app.use(correlationIdMiddleware);
+app.use("/api", createSystemLogsRouter(bizLogger));
+
 app.use(requestId);
 app.use(loggerMiddleware);
 app.use(responseMiddleware);
@@ -214,6 +223,7 @@ app.get("/", (req, res) => {
 
 app.use(notFound);
 // app.use(corsErrorHandler);
+app.use(logErrorMiddleware(bizLogger));
 app.use(errorHandler);
 
 module.exports = app;

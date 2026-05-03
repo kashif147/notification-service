@@ -23,7 +23,8 @@
     "seed:notification-template": "node scripts/seed-notification-system-default-template.js"
   },
   "dependencies": {
-    "@projectShell/rabbitmq-middleware": "github:kashif147/rabbitmq-middleware#gateway",
+    "@projectShell/logging-lib": "git+https://github.com/kashif147/logging-lib.git#main",
+    "@projectShell/rabbitmq-middleware": "file:../rabbitmq-middleware",
     "@socket.io/redis-adapter": "^8.3.0",
     "amqplib": "^0.10.9",
     "axios": "^1.15.0",
