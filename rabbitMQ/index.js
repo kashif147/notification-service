@@ -142,15 +142,21 @@ async function setupConsumers() {
       SUBSCRIPTION_CURRENT_UPDATED,
       "members.subscription.resigned.v1",
       "members.subscription.resignation.undone.v1",
+      "members.subscription.category.changed.v1",
     ]);
 
     const subscriptionCreatedListener = require("./listeners/subscriptionCreated.listener");
     const subscriptionResignedListener = require("./listeners/subscriptionResigned.listener");
     const subscriptionResignationUndoneListener = require("./listeners/subscriptionResignationUndone.listener");
+    const subscriptionCategoryChangedListener = require("./listeners/subscriptionCategoryChanged.listener");
 
     consumer.registerHandler(SUBSCRIPTION_CURRENT_UPDATED, subscriptionCreatedListener);
     consumer.registerHandler("members.subscription.resigned.v1", subscriptionResignedListener);
     consumer.registerHandler("members.subscription.resignation.undone.v1", subscriptionResignationUndoneListener);
+    consumer.registerHandler(
+      "members.subscription.category.changed.v1",
+      subscriptionCategoryChangedListener
+    );
     await consumer.consume(MEMBERSHIP_QUEUE, { prefetch: 10 });
 
     logger.info("Membership events consumer ready", { queue: MEMBERSHIP_QUEUE });
