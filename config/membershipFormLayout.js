@@ -11,6 +11,46 @@ function numEnv(key, defaultVal) {
   return Number.isFinite(n) ? n : defaultVal;
 }
 
+/** Checkbox tick positions per frequency (PDF user space, bottom-left origin). Override via FORM_* env. */
+const FREQ_ENV_SUFFIX = {
+  Weekly: "WEEKLY",
+  Fortnightly: "FORTNIGHTLY",
+  Monthly: "MONTHLY",
+  Quarterly: "QUARTERLY",
+  Annually: "ANNUALLY",
+};
+
+/** Approximate defaults — tune with MEMBERSHIP_FORM_* PDF or FORM_* env vars */
+const SBO_FREQ_DEFAULTS = {
+  Weekly: { x: 308, y: 722 },
+  Fortnightly: { x: 362, y: 722 },
+  Monthly: { x: 418, y: 722 },
+  Quarterly: { x: 482, y: 722 },
+  Annually: { x: 548, y: 722 },
+};
+
+const SD19_FREQ_DEFAULTS = {
+  Weekly: { x: 308, y: 548 },
+  Fortnightly: { x: 362, y: 548 },
+  Monthly: { x: 418, y: 548 },
+  Quarterly: { x: 482, y: 548 },
+  Annually: { x: 548, y: 548 },
+};
+
+function buildFrequencyTicks(prefix, defaults) {
+  const tickSize = numEnv(`${prefix}_TICK_SIZE`, 11);
+  const out = {};
+  for (const [label, def] of Object.entries(defaults)) {
+    const sfx = FREQ_ENV_SUFFIX[label];
+    out[label] = {
+      x: numEnv(`${prefix}_${sfx}_X`, def.x),
+      y: numEnv(`${prefix}_${sfx}_Y`, def.y),
+      size: tickSize,
+    };
+  }
+  return out;
+}
+
 const assetDir = path.join(__dirname, "../assets/membership-forms");
 
 function paths() {
@@ -23,11 +63,32 @@ function paths() {
 }
 
 function sboLayout() {
+  const baseX = numEnv("FORM_SBO_INMO_REF_X", 320);
+  const baseY = numEnv("FORM_SBO_INMO_REF_Y", 698);
+  const size = numEnv("FORM_SBO_INMO_REF_SIZE", 9);
+  const slotCount = Math.min(
+    8,
+    Math.max(1, Math.round(numEnv("FORM_SBO_INMO_REF_SLOT_COUNT", 3))),
+  );
+  const slotDx = numEnv("FORM_SBO_INMO_REF_SLOT_DX", 92);
+  const memberRefSlots = [];
+  for (let i = 0; i < slotCount; i += 1) {
+    memberRefSlots.push({
+      x: numEnv(`FORM_SBO_INMO_REF_${i + 1}_X`, baseX + i * slotDx),
+      y: numEnv(`FORM_SBO_INMO_REF_${i + 1}_Y`, baseY),
+      size,
+    });
+  }
+
   return {
-    memberRef: {
-      x: numEnv("FORM_SBO_INMO_REF_X", 320),
-      y: numEnv("FORM_SBO_INMO_REF_Y", 698),
-      size: numEnv("FORM_SBO_INMO_REF_SIZE", 9),
+    /** @deprecated use memberRefSlots */
+    memberRef: memberRefSlots[0],
+    memberRefSlots,
+    frequencyTicks: buildFrequencyTicks("FORM_SBO_FREQ", SBO_FREQ_DEFAULTS),
+    amount: {
+      x: numEnv("FORM_SBO_AMOUNT_X", 430),
+      y: numEnv("FORM_SBO_AMOUNT_Y", 668),
+      size: numEnv("FORM_SBO_AMOUNT_SIZE", 9),
     },
   };
 }
@@ -66,6 +127,13 @@ function sd19LayoutFallback() {
       y: numEnv("FORM_SD19_PAYROLL_LINE_Y", 376),
       size: numEnv("FORM_SD19_PAYROLL_SIZE", 10),
     },
+    amount: {
+      lineLeft: numEnv("FORM_SD19_AMOUNT_LINE_LEFT", 132),
+      lineRight: numEnv("FORM_SD19_AMOUNT_LINE_RIGHT", 420),
+      y: numEnv("FORM_SD19_AMOUNT_LINE_Y", 344),
+      size: numEnv("FORM_SD19_AMOUNT_SIZE", 10),
+    },
+    frequencyTicks: buildFrequencyTicks("FORM_SD19_FREQ", SD19_FREQ_DEFAULTS),
   };
 }
 

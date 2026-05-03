@@ -15,6 +15,14 @@ module.exports = async function handleSubscriptionCreated(payload) {
     return;
   }
 
+  if (data?.skipMembershipApprovedNotification === true) {
+    logger.debug(
+      { userId, tenantId },
+      "Skipping Membership Approved notification (reactivation / current.updated without welcome)"
+    );
+    return;
+  }
+
   const io = getSocketIO();
   const onlineUsers = getOnlineUsers();
 

@@ -25,7 +25,7 @@ module.exports = async function handleSubscriptionResignationUndone(payload) {
       tenantId,
       userId,
       title: "Membership Reactivated",
-      body: "Your membership resignation has been undone. Welcome back!",
+      body: "Your membership has been successfully reactivated. Welcome back. If you need any assistance, please contact us.",
       metadata: {
         type: "SUBSCRIPTION_RESIGNATION_UNDONE",
         subscriptionId: data?.subscriptionId,

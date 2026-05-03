@@ -33,8 +33,10 @@ function resolveWorkLocation(effective) {
 }
 
 /** Membership category label from subscription details (e.g. application-approved payload). */
-function resolveMembershipCategory(effective) {
-  const raw = effective?.subscriptionDetails?.membershipCategory;
+function resolveMembershipCategory(effective, mergedSubscriptionDetails) {
+  const raw =
+    mergedSubscriptionDetails?.membershipCategory ??
+    effective?.subscriptionDetails?.membershipCategory;
   if (raw == null) return "";
   const s = String(raw).trim();
   return s;
@@ -77,6 +79,25 @@ module.exports = async function handleApplicationReviewApproved(payload) {
   const applicationId = data?.applicationId;
   const profileId = data?.profileId;
 
+  const attrs = data?.subscriptionAttributes;
+  const subscriptionDetailsForForm = { ...(effective?.subscriptionDetails || {}) };
+  if (attrs && typeof attrs === "object") {
+    if (
+      attrs.paymentFrequency != null &&
+      (subscriptionDetailsForForm.paymentFrequency == null ||
+        subscriptionDetailsForForm.paymentFrequency === "")
+    ) {
+      subscriptionDetailsForForm.paymentFrequency = attrs.paymentFrequency;
+    }
+    if (
+      attrs.membershipCategory != null &&
+      (subscriptionDetailsForForm.membershipCategory == null ||
+        subscriptionDetailsForForm.membershipCategory === "")
+    ) {
+      subscriptionDetailsForForm.membershipCategory = attrs.membershipCategory;
+    }
+  }
+
   let pdfBuffer;
   let attachment;
   if (memberId && formKind && effective) {
@@ -91,6 +112,7 @@ module.exports = async function handleApplicationReviewApproved(payload) {
             formKind === "SD19" ? resolveMemberFullName(effective) : "",
           workLocation:
             formKind === "SD19" ? resolveWorkLocation(effective) : "",
+          subscriptionDetails: subscriptionDetailsForForm,
         });
         const filename =
           formKind === "SBO"
@@ -115,22 +137,28 @@ module.exports = async function handleApplicationReviewApproved(payload) {
     }
   }
 
-  const formLabel =
-    formKind === "SBO"
-      ? "standing order"
-      : formKind === "SD19"
-        ? "salary deduction"
-        : null;
-
   let bodyWithForm;
   if (formKind === "SD19") {
-    const categorySegment = resolveMembershipCategory(effective);
+    const categorySegment = resolveMembershipCategory(
+      effective,
+      subscriptionDetailsForForm,
+    );
     const beforeMembership = categorySegment
       ? `${categorySegment} `
       : "";
     bodyWithForm = `You chose to pay by Salary Deduction for your ${beforeMembership}membership. Please download, print, sign, and return your form or submit it directly via your membership companion mobile App`;
-  } else if (attachment && formLabel) {
-    bodyWithForm = `Your membership application has been approved. Your prefilled ${formLabel} form is attached — open the notification to download the PDF.`;
+  } else if (formKind === "SBO") {
+    const categorySegment = resolveMembershipCategory(
+      effective,
+      subscriptionDetailsForForm,
+    );
+    const beforeMembership = categorySegment
+      ? `${categorySegment} `
+      : "";
+    const attachedDetailsSentence = attachment
+      ? " The required details are included in the attached form."
+      : "";
+    bodyWithForm = `You have chosen to pay by Standing Order for your ${beforeMembership}membership. Please set up your Standing Order using your banking App.${attachedDetailsSentence} Kindly return a signed copy by post or your membership companion mobile app.`;
   } else {
     bodyWithForm = "Your membership application has been approved.";
   }
@@ -138,7 +166,9 @@ module.exports = async function handleApplicationReviewApproved(payload) {
   const notificationTitle =
     formKind === "SD19"
       ? "Submit Salary Deduction Form"
-      : "Application approved";
+      : formKind === "SBO"
+        ? "Submit Standing Order Form"
+        : "Application approved";
 
   await dispatchNotification(
     {
