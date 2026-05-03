@@ -17,7 +17,7 @@ router.get(
       if (!userId || !tenantId) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100);
+      const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 500, 1), 1000);
       const notifications = await NotificationHistory.find({
         tenantId,
         userId,

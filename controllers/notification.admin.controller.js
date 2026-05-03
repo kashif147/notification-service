@@ -25,8 +25,8 @@ exports.listNotificationsAdmin = async (req, res, next) => {
     const { tenantId } = crmContext(req);
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const limit = Math.min(
-      100,
-      Math.max(1, parseInt(req.query.limit, 10) || 20)
+      1000,
+      Math.max(1, parseInt(req.query.limit, 10) || 500)
     );
     const skip = (page - 1) * limit;
 
@@ -158,8 +158,8 @@ exports.listNotificationsWithTemplate = async (req, res, next) => {
     const { tenantId, userId } = crmContext(req);
     const page = Math.max(1, parseInt(req.body.page, 10) || 1);
     const limit = Math.min(
-      100,
-      Math.max(1, parseInt(req.body.limit, 10) || 20)
+      1000,
+      Math.max(1, parseInt(req.body.limit, 10) || 500)
     );
     const skip = (page - 1) * limit;
     const templateId = req.body.templateId;

@@ -425,7 +425,7 @@ const sendFirebaseNotification = {
   // Get all active tokens
   getAllActiveTokens: async (req, res) => {
     try {
-      const { page = 1, limit = 50 } = req.query;
+      const { page = 1, limit = 500 } = req.query;
       const skip = (page - 1) * limit;
 
       const tokens = await FCMToken.find({ isActive: true })
@@ -487,7 +487,7 @@ const sendFirebaseNotification = {
         deviceId,
         isActive = true,
       } = req.query;
-      const { page = 1, limit = 50 } = req.query;
+      const { page = 1, limit = 500 } = req.query;
       const skip = (page - 1) * limit;
 
       // Build query object based on provided filters
@@ -594,7 +594,7 @@ const sendFirebaseNotification = {
     try {
       // Only accept filtering and pagination parameters from query
       // userId and tenantId are NOT accepted as input - they come from JWT token only
-      const { isRead, status, page = 1, limit = 50 } = req.query;
+      const { isRead, status, page = 1, limit = 500 } = req.query;
 
       // Extract userId and tenantId from JWT token only (not from query or body)
       const userId = req.user?.id || req.user?.sub || req.userId;
