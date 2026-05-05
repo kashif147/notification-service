@@ -138,17 +138,22 @@ async function setupConsumers() {
       messageTtl: 3600000,
     });
 
+    const MEMBER_NOTIFICATION_REQUESTED =
+      "members.member.notification.requested.v1";
+
     await consumer.bindQueue(MEMBERSHIP_QUEUE, "membership.events", [
       SUBSCRIPTION_CURRENT_UPDATED,
       "members.subscription.resigned.v1",
       "members.subscription.resignation.undone.v1",
       "members.subscription.category.changed.v1",
+      MEMBER_NOTIFICATION_REQUESTED,
     ]);
 
     const subscriptionCreatedListener = require("./listeners/subscriptionCreated.listener");
     const subscriptionResignedListener = require("./listeners/subscriptionResigned.listener");
     const subscriptionResignationUndoneListener = require("./listeners/subscriptionResignationUndone.listener");
     const subscriptionCategoryChangedListener = require("./listeners/subscriptionCategoryChanged.listener");
+    const memberNotificationRequestedListener = require("./listeners/memberNotificationRequested.listener");
 
     consumer.registerHandler(SUBSCRIPTION_CURRENT_UPDATED, subscriptionCreatedListener);
     consumer.registerHandler("members.subscription.resigned.v1", subscriptionResignedListener);
@@ -156,6 +161,10 @@ async function setupConsumers() {
     consumer.registerHandler(
       "members.subscription.category.changed.v1",
       subscriptionCategoryChangedListener
+    );
+    consumer.registerHandler(
+      MEMBER_NOTIFICATION_REQUESTED,
+      memberNotificationRequestedListener
     );
     await consumer.consume(MEMBERSHIP_QUEUE, { prefetch: 10 });
 

@@ -21,6 +21,22 @@ const {
   metadataHasAttachmentPayload,
 } = require("../helpers/notificationAttachmentMetadata.js");
 
+function dedupeTokensByDevice(tokens = []) {
+  const seen = new Set();
+  const deduped = [];
+  for (const tokenDoc of tokens) {
+    const platform = String(tokenDoc.platform || "").toLowerCase();
+    const deviceId = tokenDoc.deviceId || "";
+    const key = deviceId
+      ? `${tokenDoc.tenantId}:${tokenDoc.userId}:${platform}:${deviceId}`
+      : `${tokenDoc.tenantId}:${tokenDoc.userId}:${platform}:token:${tokenDoc.fcmToken}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(tokenDoc);
+  }
+  return deduped;
+}
+
 async function dispatchNotification(event, io, onlineUsers) {
   const { tenantId, userId, title, body, metadata = {} } = event;
 
@@ -37,10 +53,23 @@ async function dispatchNotification(event, io, onlineUsers) {
     status: "pending",
   });
 
+  const allActiveTokens = await FCMToken.find({
+    tenantId,
+    userId,
+    isActive: true,
+  }).sort({ lastUsedAt: -1, createdAt: -1 });
+
+  const mobileTokens = dedupeTokensByDevice(
+    allActiveTokens.filter((t) => ["ios", "android"].includes(t.platform))
+  );
+
+  // Mobile flow is always FCM-based, even when user is online.
+  // This ensures actual device push delivery semantics for iOS/Android.
+  const shouldUseMobileFcm = mobileTokens.length > 0;
   const isOnline = onlineUsers?.has(userKey);
 
-  // 2. If online → emit real-time (normalized shape for API/Socket consistency)
-  if (isOnline && io) {
+  // 2. If online and no mobile FCM route → emit real-time
+  if (isOnline && io && !shouldUseMobileFcm) {
     const payload = {
       _id: notification._id,
       title: notification.title,
@@ -58,15 +87,18 @@ async function dispatchNotification(event, io, onlineUsers) {
     return notification;
   }
 
-  // 3. If offline → send Firebase push
-  const tokens = await FCMToken.find({
-    tenantId,
-    userId,
-    isActive: true,
-  });
+  // 3. Send Firebase push
+  const tokens = shouldUseMobileFcm
+    ? mobileTokens
+    : dedupeTokensByDevice(allActiveTokens);
 
   const fcmData =
     metadataHasAttachmentPayload(metadata) ? { hasAttachments: "true" } : null;
+
+  let successfulSends = 0;
+  let failedSends = 0;
+  let lastFirebaseMessageId = null;
+  const failureReasons = [];
 
   for (const tokenDoc of tokens) {
     try {
@@ -77,16 +109,28 @@ async function dispatchNotification(event, io, onlineUsers) {
         notification._id,
         fcmData,
       );
-
-      notification.status = "sent";
-      notification.firebaseMessageId = response;
-      await notification.save();
+      successfulSends += 1;
+      lastFirebaseMessageId = response || lastFirebaseMessageId;
     } catch (err) {
-      notification.status = "failed";
-      notification.error = err.message;
-      await notification.save();
+      failedSends += 1;
+      failureReasons.push(err?.message || "Unknown error");
     }
   }
+
+  if (successfulSends > 0) {
+    notification.status = "sent";
+    notification.firebaseMessageId = lastFirebaseMessageId;
+    notification.error =
+      failedSends > 0 ? `Partial failure: ${failureReasons.join(" | ")}` : null;
+  } else {
+    notification.status = "failed";
+    notification.firebaseMessageId = null;
+    notification.error =
+      failedSends > 0
+        ? failureReasons.join(" | ")
+        : "No active FCM tokens found for user";
+  }
+  await notification.save();
 
   return notification;
 }

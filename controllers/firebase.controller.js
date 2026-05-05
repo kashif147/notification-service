@@ -119,6 +119,21 @@ const sendFirebaseNotification = {
         }
       );
 
+      // Keep one active token per device for this user+tenant to reduce stale duplicates.
+      // If token rotated on same device, deactivate older active tokens.
+      if (deviceId) {
+        await FCMToken.updateMany(
+          {
+            tenantId,
+            userId,
+            deviceId,
+            isActive: true,
+            _id: { $ne: tokenData._id },
+          },
+          { $set: { isActive: false } }
+        );
+      }
+
       logger.info(
         { userId, tenantId, tokenId: tokenData._id },
         "FCM token registered/updated"
