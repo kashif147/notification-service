@@ -53,9 +53,18 @@
         "options": {},
         "body": {
           "to": "={{$json.deviceToken}}",
+          "priority": "high",
+          "content_available": true,
           "notification": {
             "title": "={{$json.title}}",
-            "body": "={{$json.text}}"
+            "body": "={{$json.text}}",
+            "android_channel_id": "portal_default_v2",
+            "sound": "default"
+          },
+          "data": {
+            "title": "={{$json.title}}",
+            "body": "={{$json.text}}",
+            "notificationId": "={{$json.notificationId}}"
           }
         }
       },
