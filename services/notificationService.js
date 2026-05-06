@@ -2,6 +2,11 @@ const admin = require("../util/firebase");
 const logger = require("../config/logger.js");
 const androidChannelId = process.env.FCM_ANDROID_CHANNEL_ID || "portal_default_v2";
 
+function isMobilePlatform(platform) {
+  const p = String(platform || "").toLowerCase();
+  return p === "ios" || p === "android";
+}
+
 const notificationService = {
   /**
    * @param {Record<string, string>} [dataPayload] FCM `data` map — values must be strings; keep small.
@@ -11,7 +16,8 @@ const notificationService = {
     body,
     fcmToken,
     notificationId = null,
-    dataPayload = null
+    dataPayload = null,
+    platform = null
   ) => {
     // Verify Firebase is initialized
     if (admin.apps.length === 0) {
@@ -33,14 +39,16 @@ const notificationService = {
       : {};
     const extra =
       dataPayload && typeof dataPayload === "object" ? { ...dataPayload } : {};
-    const data = { ...baseData, ...extra };
+    const data = {
+      ...baseData,
+      ...extra,
+      title: String(title || ""),
+      body: String(body || ""),
+    };
+    const mobileTarget = isMobilePlatform(platform);
 
     const message = {
       token: fcmToken,
-      notification: {
-        title: title,
-        body: body,
-      },
       android: {
         priority: "high",
         notification: {
@@ -61,6 +69,13 @@ const notificationService = {
       },
       ...(Object.keys(data).length > 0 && { data }),
     };
+    // For mobile apps (Notifee path), send data-only so app fully controls display.
+    if (!mobileTarget) {
+      message.notification = {
+        title,
+        body,
+      };
+    }
 
     try {
       logger.info(
@@ -68,6 +83,7 @@ const notificationService = {
           tokenPrefix: fcmToken?.substring(0, 10) + "...",
           androidPriority: message?.android?.priority,
           androidChannelId: message?.android?.notification?.channelId,
+          platform: platform || "unknown",
           hasNotificationBlock: !!message?.notification,
           hasDataBlock: !!message?.data && Object.keys(message.data).length > 0,
           notificationId: data?.notificationId || null,

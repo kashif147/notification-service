@@ -129,6 +129,7 @@ async function dispatchNotification(event, io, onlineUsers) {
         tokenDoc.fcmToken,
         notification._id,
         fcmData,
+        tokenDoc.platform,
       );
       successfulSends += 1;
       lastFirebaseMessageId = response || lastFirebaseMessageId;
