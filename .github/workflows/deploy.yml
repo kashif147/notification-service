@@ -25,7 +25,7 @@ jobs:
       - name: Sync code
         run: |
           set -euo pipefail
-          rsync -rlvz --delete --delete-excluded \
+          rsync -rlvz --delete \
           --mkpath \
           --no-owner --no-group --no-perms --no-times --omit-dir-times \
           --exclude '.env*' \
