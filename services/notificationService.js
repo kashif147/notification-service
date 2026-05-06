@@ -1,11 +1,18 @@
 const admin = require("../util/firebase");
 const logger = require("../config/logger.js");
+const androidChannelId = process.env.FCM_ANDROID_CHANNEL_ID || "portal_default_v2";
 
 const notificationService = {
   /**
    * @param {Record<string, string>} [dataPayload] FCM `data` map — values must be strings; keep small.
    */
-  sendNotification: async (title, body, fcmToken, notificationId = null, dataPayload = null) => {
+  sendNotification: async (
+    title,
+    body,
+    fcmToken,
+    notificationId = null,
+    dataPayload = null
+  ) => {
     // Verify Firebase is initialized
     if (admin.apps.length === 0) {
       const error = new Error(
@@ -33,6 +40,24 @@ const notificationService = {
       notification: {
         title: title,
         body: body,
+      },
+      android: {
+        priority: "high",
+        notification: {
+          channelId: androidChannelId,
+          sound: "default",
+        },
+      },
+      apns: {
+        headers: {
+          "apns-priority": "10",
+        },
+        payload: {
+          aps: {
+            "content-available": 1,
+            sound: "default",
+          },
+        },
       },
       ...(Object.keys(data).length > 0 && { data }),
     };
