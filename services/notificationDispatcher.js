@@ -34,7 +34,25 @@ function dedupeTokensByDevice(tokens = []) {
     seen.add(key);
     deduped.push(tokenDoc);
   }
-  return deduped;
+  // Final safety net: never attempt same raw FCM token more than once.
+  const seenToken = new Set();
+  return deduped.filter((tokenDoc) => {
+    const token = String(tokenDoc?.fcmToken || "");
+    if (!token || seenToken.has(token)) return false;
+    seenToken.add(token);
+    return true;
+  });
+}
+
+function isInvalidOrUnregisteredTokenError(err) {
+  const code = String(err?.code || "").toLowerCase();
+  const message = String(err?.message || "").toLowerCase();
+  return (
+    code.includes("registration-token-not-registered") ||
+    code.includes("invalid-registration-token") ||
+    message.includes("notregistered") ||
+    message.includes("requested entity was not found")
+  );
 }
 
 async function dispatchNotification(event, io, onlineUsers) {
@@ -88,9 +106,12 @@ async function dispatchNotification(event, io, onlineUsers) {
   }
 
   // 3. Send Firebase push
-  const tokens = shouldUseMobileFcm
+  // Current product behavior: send to only the latest active token
+  // (sorted by lastUsedAt desc above).
+  const candidateTokens = shouldUseMobileFcm
     ? mobileTokens
     : dedupeTokensByDevice(allActiveTokens);
+  const tokens = candidateTokens.length > 0 ? [candidateTokens[0]] : [];
 
   const fcmData =
     metadataHasAttachmentPayload(metadata) ? { hasAttachments: "true" } : null;
@@ -114,6 +135,12 @@ async function dispatchNotification(event, io, onlineUsers) {
     } catch (err) {
       failedSends += 1;
       failureReasons.push(err?.message || "Unknown error");
+      if (isInvalidOrUnregisteredTokenError(err)) {
+        await FCMToken.updateMany(
+          { fcmToken: tokenDoc.fcmToken, isActive: true },
+          { $set: { isActive: false } }
+        );
+      }
     }
   }
 

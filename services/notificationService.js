@@ -63,6 +63,19 @@ const notificationService = {
     };
 
     try {
+      logger.info(
+        {
+          tokenPrefix: fcmToken?.substring(0, 10) + "...",
+          androidPriority: message?.android?.priority,
+          androidChannelId: message?.android?.notification?.channelId,
+          hasNotificationBlock: !!message?.notification,
+          hasDataBlock: !!message?.data && Object.keys(message.data).length > 0,
+          notificationId: data?.notificationId || null,
+          metadataType: data?.type || null,
+        },
+        "FCM send config"
+      );
+
       const response = await admin.messaging().send(message);
       logger.debug(
         { fcmToken: fcmToken.substring(0, 10) + "..." },
