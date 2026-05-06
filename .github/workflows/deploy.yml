@@ -25,10 +25,17 @@ jobs:
       - name: Sync code
         run: |
           set -euo pipefail
+          # Never use rsync --delete-excluded: excluded env files must remain on the VM.
           rsync -rlvz --delete \
           --mkpath \
           --no-owner --no-group --no-perms --no-times --omit-dir-times \
-          --exclude '.env*' \
+          --include '.env.example' \
+          --include '.env.sample' \
+          --exclude '.env' \
+          --exclude '.env.*' \
+          --exclude '.env_*' \
+          --exclude '*.env' \
+          --exclude '.envrc' \
           --exclude '.git/' \
           --exclude '.github/' \
           --exclude 'node_modules/' \
