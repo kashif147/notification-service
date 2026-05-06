@@ -14,18 +14,25 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+      - name: Configure SSH key
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf "%s" "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H "${{ secrets.VM_HOST }}" >> ~/.ssh/known_hosts
 
       - name: Sync code
         run: |
-          rsync -avz --delete \
+          set -euo pipefail
+          rsync -avz --delete --delete-excluded \
           --mkpath \
           --no-owner --no-group --no-perms --omit-dir-times \
           --exclude '.env*' \
           --exclude '.git/' \
           --exclude '.github/' \
+          --exclude 'node_modules/' \
+          --exclude '*.log' \
           -e "ssh -o StrictHostKeyChecking=no" ./ \
           ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }}:/home/deploy/membership-platform/notification-service/
 
