@@ -17,7 +17,8 @@ const notificationService = {
     fcmToken,
     notificationId = null,
     dataPayload = null,
-    platform = null
+    platform = null,
+    forceDataOnly = false
   ) => {
     // Verify Firebase is initialized
     if (admin.apps.length === 0) {
@@ -45,7 +46,7 @@ const notificationService = {
       title: String(title || ""),
       body: String(body || ""),
     };
-    const mobileTarget = isMobilePlatform(platform);
+    const mobileTarget = forceDataOnly || isMobilePlatform(platform);
 
     const message = {
       token: fcmToken,

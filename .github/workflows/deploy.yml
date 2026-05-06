@@ -9,8 +9,10 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: webfactory/ssh-agent@v0.9.0
         with:
@@ -19,7 +21,11 @@ jobs:
       - name: Sync code
         run: |
           rsync -avz --delete \
+          --mkpath \
+          --no-owner --no-group --no-perms --omit-dir-times \
           --exclude '.env*' \
+          --exclude '.git/' \
+          --exclude '.github/' \
           -e "ssh -o StrictHostKeyChecking=no" ./ \
           ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }}:/home/deploy/membership-platform/notification-service/
 

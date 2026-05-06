@@ -130,6 +130,7 @@ async function dispatchNotification(event, io, onlineUsers) {
         notification._id,
         fcmData,
         tokenDoc.platform,
+        shouldUseMobileFcm,
       );
       successfulSends += 1;
       lastFirebaseMessageId = response || lastFirebaseMessageId;
