@@ -34,6 +34,8 @@ module.exports = async function handleSubscriptionCreated(payload) {
       body: "Your membership application has been approved. Welcome to the membership!",
       metadata: {
         type: "APPLICATION_APPROVED_SUBSCRIPTION_CREATED",
+        sourceEventId: payload?.eventId || null,
+        sourceEventType: payload?.eventType || null,
         subscriptionId: data?.subscriptionId,
         profileId: data?.profileId,
         applicationId: data?.applicationId,

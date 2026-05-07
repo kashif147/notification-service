@@ -49,6 +49,8 @@ module.exports = async function handleSubscriptionResigned(payload) {
       body,
       metadata: {
         type: "SUBSCRIPTION_RESIGNED",
+        sourceEventId: payload?.eventId || null,
+        sourceEventType: payload?.eventType || null,
         subscriptionId: data?.subscriptionId,
         profileId: data?.profileId,
         dateResigned: dateRaw != null ? String(dateRaw) : null,

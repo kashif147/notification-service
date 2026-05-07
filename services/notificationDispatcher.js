@@ -57,19 +57,41 @@ function isInvalidOrUnregisteredTokenError(err) {
 
 async function dispatchNotification(event, io, onlineUsers) {
   const { tenantId, userId, title, body, metadata = {} } = event;
+  const sourceEventId = metadata?.sourceEventId
+    ? String(metadata.sourceEventId)
+    : null;
 
   const userKey = `${tenantId}:${userId}`;
 
-  // 1. Save notification record first
-  const notification = await NotificationHistory.create({
-    tenantId,
-    userId,
-    fcmToken: "system",
-    title,
-    body,
-    metadata,
-    status: "pending",
-  });
+  // 1. Save/find notification record first (idempotent when sourceEventId exists)
+  let notification = null;
+  if (sourceEventId) {
+    notification = await NotificationHistory.findOne({
+      tenantId,
+      userId,
+      "metadata.sourceEventId": sourceEventId,
+      deletedAt: null,
+    });
+  }
+  if (!notification) {
+    notification = await NotificationHistory.create({
+      tenantId,
+      userId,
+      fcmToken: "system",
+      title,
+      body,
+      metadata,
+      status: "pending",
+    });
+  } else {
+    // If this source event was already processed successfully, skip re-delivery.
+    if (["sent", "delivered"].includes(String(notification.status || ""))) {
+      return notification;
+    }
+    notification.title = title;
+    notification.body = body;
+    notification.metadata = metadata;
+  }
 
   const allActiveTokens = await FCMToken.find({
     tenantId,
@@ -81,13 +103,12 @@ async function dispatchNotification(event, io, onlineUsers) {
     allActiveTokens.filter((t) => ["ios", "android"].includes(t.platform))
   );
 
-  // Mobile flow is always FCM-based, even when user is online.
-  // This ensures actual device push delivery semantics for iOS/Android.
+  // Mobile flow targets all active mobile devices.
   const shouldUseMobileFcm = mobileTokens.length > 0;
   const isOnline = onlineUsers?.has(userKey);
 
-  // 2. If online and no mobile FCM route → emit real-time
-  if (isOnline && io && !shouldUseMobileFcm) {
+  // 2. Emit portal real-time when user is online.
+  if (isOnline && io) {
     const payload = {
       _id: notification._id,
       title: notification.title,
@@ -98,20 +119,13 @@ async function dispatchNotification(event, io, onlineUsers) {
     };
     io.to(`user:${userId}`).emit("notification", payload);
     io.to(`user:${userId}`).emit("badgeIncrement", { count: 1 });
-
-    notification.status = "delivered";
-    await notification.save();
-
-    return notification;
   }
 
-  // 3. Send Firebase push
-  // Current product behavior: send to only the latest active token
-  // (sorted by lastUsedAt desc above).
+  // 3. Send Firebase push to all active devices.
   const candidateTokens = shouldUseMobileFcm
     ? mobileTokens
     : dedupeTokensByDevice(allActiveTokens);
-  const tokens = candidateTokens.length > 0 ? [candidateTokens[0]] : [];
+  const tokens = candidateTokens;
 
   const fcmData =
     metadataHasAttachmentPayload(metadata) ? { hasAttachments: "true" } : null;
@@ -128,9 +142,7 @@ async function dispatchNotification(event, io, onlineUsers) {
         body,
         tokenDoc.fcmToken,
         notification._id,
-        fcmData,
-        tokenDoc.platform,
-        shouldUseMobileFcm,
+        fcmData
       );
       successfulSends += 1;
       lastFirebaseMessageId = response || lastFirebaseMessageId;
@@ -147,17 +159,19 @@ async function dispatchNotification(event, io, onlineUsers) {
   }
 
   if (successfulSends > 0) {
-    notification.status = "sent";
+    notification.status = "delivered";
     notification.firebaseMessageId = lastFirebaseMessageId;
     notification.error =
       failedSends > 0 ? `Partial failure: ${failureReasons.join(" | ")}` : null;
   } else {
-    notification.status = "failed";
+    notification.status = isOnline && io ? "delivered" : "failed";
     notification.firebaseMessageId = null;
     notification.error =
       failedSends > 0
         ? failureReasons.join(" | ")
-        : "No active FCM tokens found for user";
+        : isOnline && io
+          ? null
+          : "No active FCM tokens found for user";
   }
   await notification.save();
 

@@ -31,6 +31,8 @@ module.exports = async function handleApplicationReviewRejected(payload) {
       body,
       metadata: {
         type: "APPLICATION_REVIEW_REJECTED",
+        sourceEventId: payload?.eventId || null,
+        sourceEventType: payload?.eventType || null,
         applicationId: data?.applicationId,
         reason: reason ?? null,
       },

@@ -66,6 +66,8 @@ module.exports = async function handleSubscriptionCategoryChanged(payload) {
       body,
       metadata: {
         type: "MEMBERSHIP_CATEGORY_CHANGED",
+        sourceEventId: payload?.eventId || null,
+        sourceEventType: payload?.eventType || null,
         subscriptionId: data?.subscriptionId,
         profileId: data?.profileId,
         applicationId: data?.applicationId,

@@ -16,6 +16,8 @@ module.exports = async function handleBatchCompleted(payload) {
       body: `Batch ${payload.batchId} completed successfully`,
       metadata: {
         type: "BATCH_COMPLETED",
+        sourceEventId: payload?.eventId || null,
+        sourceEventType: payload?.eventType || null,
         batchId: payload.batchId,
       },
     },

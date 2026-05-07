@@ -28,6 +28,8 @@ module.exports = async function handleSubscriptionResignationUndone(payload) {
       body: "Your membership has been successfully reactivated. Welcome back. If you need any assistance, please contact us.",
       metadata: {
         type: "SUBSCRIPTION_RESIGNATION_UNDONE",
+        sourceEventId: payload?.eventId || null,
+        sourceEventType: payload?.eventType || null,
         subscriptionId: data?.subscriptionId,
         profileId: data?.profileId,
       },

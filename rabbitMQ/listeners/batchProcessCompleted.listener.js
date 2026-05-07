@@ -28,6 +28,8 @@ module.exports = async function handleBatchProcessCompleted(payload) {
       body,
       metadata: {
         type: "BATCH_PROCESS_COMPLETED",
+        sourceEventId: payload?.eventId || null,
+        sourceEventType: payload?.eventType || null,
         batchDetailId: data.batchDetailId,
         batchName,
         referenceNumber: data.referenceNumber || null,

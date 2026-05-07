@@ -38,10 +38,13 @@ module.exports = async function handleMemberNotificationRequested(payload) {
       userId,
       title,
       body,
-      metadata:
-        data?.metadata && typeof data.metadata === "object"
+      metadata: {
+        ...(data?.metadata && typeof data.metadata === "object"
           ? data.metadata
-          : {},
+          : {}),
+        sourceEventId: payload?.eventId || null,
+        sourceEventType: payload?.eventType || null,
+      },
     },
     io,
     onlineUsers

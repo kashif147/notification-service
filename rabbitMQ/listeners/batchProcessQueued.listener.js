@@ -23,6 +23,8 @@ module.exports = async function handleBatchProcessQueued(payload) {
       body: "Batch has been queued.",
       metadata: {
         type: "BATCH_PROCESS_QUEUED",
+        sourceEventId: payload?.eventId || null,
+        sourceEventType: payload?.eventType || null,
         batchDetailId: data.batchDetailId,
         batchName,
         referenceNumber: data.referenceNumber || null,

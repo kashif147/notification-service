@@ -178,6 +178,8 @@ module.exports = async function handleApplicationReviewApproved(payload) {
       body: bodyWithForm,
       metadata: {
         type: "APPLICATION_REVIEW_APPROVED",
+        sourceEventId: payload?.eventId || null,
+        sourceEventType: payload?.eventType || null,
         applicationId,
         profileId,
         memberId: memberId != null ? String(memberId) : null,
