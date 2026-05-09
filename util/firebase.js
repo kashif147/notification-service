@@ -1,7 +1,26 @@
 var admin = require("firebase-admin");
+const fs = require("fs");
+const path = require("path");
 const logger = require("../config/logger.js");
 
 let firebaseInitialized = false;
+/** @type {string | null} */
+let initCredentialSource = null;
+/** @type {string | null} */
+let initProjectId = null;
+
+function normalizeServiceAccount(obj) {
+  if (!obj || typeof obj.private_key !== "string") return obj;
+  const copy = { ...obj };
+  copy.private_key = copy.private_key.replace(/\\n/g, "\n");
+  return copy;
+}
+
+function loadServiceAccountFromPath(filePath) {
+  const resolved = path.resolve(filePath);
+  const raw = fs.readFileSync(resolved, "utf8");
+  return normalizeServiceAccount(JSON.parse(raw));
+}
 
 // Try to initialize Firebase, but don't crash if not configured
 try {
@@ -9,7 +28,7 @@ try {
   if (!admin.apps.length) {
     let serviceAccount;
 
-    // Try to load from environment variable first
+    // Try plain JSON string first (often breaks in Docker/env files when multiline or too long)
     let envVar = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
     if (envVar) {
       // Strip leading/trailing quotes if present (common .env file issue)
@@ -28,7 +47,8 @@ try {
       }
 
       try {
-        serviceAccount = JSON.parse(envVar);
+        serviceAccount = normalizeServiceAccount(JSON.parse(envVar));
+        initCredentialSource = "FIREBASE_SERVICE_ACCOUNT_JSON";
       } catch (parseError) {
         logger.warn(
           {
@@ -40,12 +60,60 @@ try {
         );
         serviceAccount = null;
       }
-    } else {
-      // Fall back to JSON file if env var is not set
+    }
+
+    // Base64 avoids docker-compose / shell truncation and newline mangling
+    if (
+      !serviceAccount &&
+      process.env.FIREBASE_SERVICE_ACCOUNT_JSON_BASE64 &&
+      process.env.FIREBASE_SERVICE_ACCOUNT_JSON_BASE64.trim() !== ""
+    ) {
       try {
-        serviceAccount = require("./firebaseAdminSDK.json");
+        const raw = Buffer.from(
+          process.env.FIREBASE_SERVICE_ACCOUNT_JSON_BASE64.trim(),
+          "base64"
+        ).toString("utf8");
+        serviceAccount = normalizeServiceAccount(JSON.parse(raw));
+        initCredentialSource = "FIREBASE_SERVICE_ACCOUNT_JSON_BASE64";
+      } catch (parseError) {
+        logger.warn(
+          { error: parseError.message },
+          "Failed to decode/parse FIREBASE_SERVICE_ACCOUNT_JSON_BASE64"
+        );
+        serviceAccount = null;
+      }
+    }
+
+    if (
+      !serviceAccount &&
+      process.env.GOOGLE_APPLICATION_CREDENTIALS &&
+      process.env.GOOGLE_APPLICATION_CREDENTIALS.trim() !== ""
+    ) {
+      try {
+        serviceAccount = loadServiceAccountFromPath(
+          process.env.GOOGLE_APPLICATION_CREDENTIALS
+        );
+        initCredentialSource = "GOOGLE_APPLICATION_CREDENTIALS";
+      } catch (fileErr) {
+        logger.warn(
+          {
+            path: process.env.GOOGLE_APPLICATION_CREDENTIALS,
+            error: fileErr.message,
+          },
+          "Could not read GOOGLE_APPLICATION_CREDENTIALS file"
+        );
+        serviceAccount = null;
+      }
+    }
+
+    // Only if still unset — do NOT run after env/base64/GAC or we wipe good credentials (see bugfix).
+    if (!serviceAccount) {
+      try {
+        serviceAccount = normalizeServiceAccount(
+          require("./firebaseAdminSDK.json")
+        );
+        initCredentialSource = "firebaseAdminSDK.json";
       } catch (fileError) {
-        // File doesn't exist or can't be loaded - that's okay, Firebase is optional
         serviceAccount = null;
       }
     }
@@ -60,13 +128,47 @@ try {
     if (saOk) {
       admin.initializeApp({
         credential: admin.credential.cert(serviceAccount),
+        projectId: serviceAccount.project_id,
       });
 
       firebaseInitialized = true;
+      initProjectId = serviceAccount.project_id;
       logger.info(
-        { projectId: serviceAccount.project_id },
+        {
+          projectId: serviceAccount.project_id,
+          credentialSource: initCredentialSource,
+          privateKeyIdSuffix:
+            typeof serviceAccount.private_key_id === "string"
+              ? serviceAccount.private_key_id.slice(-8)
+              : null,
+        },
         "Firebase Admin SDK initialized"
       );
+
+      // Confirms service account can mint OAuth tokens (failure ⇒ same error as FCM send).
+      setImmediate(() => {
+        (async () => {
+          try {
+            const cred = admin.app().options.credential;
+            if (cred && typeof cred.getAccessToken === "function") {
+              await cred.getAccessToken();
+              logger.info(
+                { credentialSource: initCredentialSource },
+                "Firebase service account OAuth token fetch succeeded"
+              );
+            }
+          } catch (tokenErr) {
+            logger.error(
+              {
+                err: tokenErr.message,
+                credentialSource: initCredentialSource,
+                projectId: serviceAccount.project_id,
+              },
+              "Firebase service account cannot obtain OAuth access token — FCM will fail with missing-credential errors"
+            );
+          }
+        })();
+      });
     } else if (serviceAccount && serviceAccount.project_id) {
       logger.warn(
         {
@@ -79,15 +181,21 @@ try {
         "Firebase service account JSON is incomplete (need client_email and private_key). FCM will fail with OAuth errors until fixed."
       );
     } else {
+      const rawLen = process.env.FIREBASE_SERVICE_ACCOUNT_JSON
+        ? process.env.FIREBASE_SERVICE_ACCOUNT_JSON.length
+        : 0;
       logger.warn(
         {
-          hasEnvVar: !!process.env.FIREBASE_SERVICE_ACCOUNT_JSON,
+          hasEnvJson: !!process.env.FIREBASE_SERVICE_ACCOUNT_JSON,
+          envJsonLength: rawLen,
+          hasEnvJsonB64: !!process.env.FIREBASE_SERVICE_ACCOUNT_JSON_BASE64,
+          hasGac: !!process.env.GOOGLE_APPLICATION_CREDENTIALS,
           nodeEnv: process.env.NODE_ENV,
-          allEnvKeys: Object.keys(process.env).filter((k) =>
+          envKeysFirebase: Object.keys(process.env).filter((k) =>
             k.includes("FIREBASE")
           ),
         },
-        "Firebase service account not configured. Set FIREBASE_SERVICE_ACCOUNT_JSON environment variable or provide firebaseAdminSDK.json file. Notification features will not be available."
+        "Firebase service account not configured. Set FIREBASE_SERVICE_ACCOUNT_JSON, FIREBASE_SERVICE_ACCOUNT_JSON_BASE64, GOOGLE_APPLICATION_CREDENTIALS (path to JSON file), or provide firebaseAdminSDK.json."
       );
     }
   } else {
@@ -105,3 +213,9 @@ try {
 module.exports = admin;
 module.exports.isInitialized = () =>
   firebaseInitialized || admin.apps.length > 0;
+/** Safe for logs/health: no secrets */
+module.exports.getInitReport = () => ({
+  initialized: firebaseInitialized || admin.apps.length > 0,
+  credentialSource: initCredentialSource,
+  projectId: initProjectId,
+});

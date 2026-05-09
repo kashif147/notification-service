@@ -204,6 +204,14 @@ app.get("/health/database", (req, res) => {
   });
 });
 
+app.get("/health/firebase", (req, res) => {
+  const firebaseUtil = require("./util/firebase.js");
+  res.status(200).json({
+    ...firebaseUtil.getInitReport(),
+    timestamp: new Date().toISOString(),
+  });
+});
+
 app.get("/", (req, res) => {
   res.success({
     service: "Notification Service",
