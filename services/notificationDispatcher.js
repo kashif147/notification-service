@@ -142,7 +142,8 @@ async function dispatchNotification(event, io, onlineUsers) {
         body,
         tokenDoc.fcmToken,
         notification._id,
-        fcmData
+        fcmData,
+        tokenDoc.platform
       );
       successfulSends += 1;
       lastFirebaseMessageId = response || lastFirebaseMessageId;
@@ -163,15 +164,17 @@ async function dispatchNotification(event, io, onlineUsers) {
     notification.firebaseMessageId = lastFirebaseMessageId;
     notification.error =
       failedSends > 0 ? `Partial failure: ${failureReasons.join(" | ")}` : null;
+  } else if (failedSends > 0) {
+    // Push failed; do not imply FCM succeeded just because Socket.IO delivered.
+    notification.status = isOnline && io ? "sent" : "failed";
+    notification.firebaseMessageId = null;
+    notification.error = failureReasons.join(" | ");
   } else {
     notification.status = isOnline && io ? "delivered" : "failed";
     notification.firebaseMessageId = null;
-    notification.error =
-      failedSends > 0
-        ? failureReasons.join(" | ")
-        : isOnline && io
-          ? null
-          : "No active FCM tokens found for user";
+    notification.error = isOnline && io
+      ? null
+      : "No active FCM tokens found for user";
   }
   await notification.save();
 

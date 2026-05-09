@@ -50,7 +50,14 @@ try {
       }
     }
 
-    if (serviceAccount && serviceAccount.project_id) {
+    const saOk =
+      serviceAccount &&
+      serviceAccount.project_id &&
+      serviceAccount.client_email &&
+      typeof serviceAccount.private_key === "string" &&
+      serviceAccount.private_key.includes("BEGIN PRIVATE KEY");
+
+    if (saOk) {
       admin.initializeApp({
         credential: admin.credential.cert(serviceAccount),
       });
@@ -59,6 +66,17 @@ try {
       logger.info(
         { projectId: serviceAccount.project_id },
         "Firebase Admin SDK initialized"
+      );
+    } else if (serviceAccount && serviceAccount.project_id) {
+      logger.warn(
+        {
+          projectId: serviceAccount.project_id,
+          hasClientEmail: !!serviceAccount.client_email,
+          hasPrivateKey:
+            typeof serviceAccount.private_key === "string" &&
+            serviceAccount.private_key.length > 0,
+        },
+        "Firebase service account JSON is incomplete (need client_email and private_key). FCM will fail with OAuth errors until fixed."
       );
     } else {
       logger.warn(
