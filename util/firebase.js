@@ -145,18 +145,18 @@ try {
         "Firebase Admin SDK initialized"
       );
 
-      // Confirms service account can mint OAuth tokens (failure ⇒ same error as FCM send).
+      // Same token path as admin.messaging().send() (not credential.getAccessToken alone).
       setImmediate(() => {
         (async () => {
           try {
-            const cred = admin.app().options.credential;
-            if (cred && typeof cred.getAccessToken === "function") {
-              await cred.getAccessToken();
-              logger.info(
-                { credentialSource: initCredentialSource },
-                "Firebase service account OAuth token fetch succeeded"
-              );
-            }
+            const tok = await admin.app().INTERNAL.getToken(true);
+            logger.info(
+              {
+                credentialSource: initCredentialSource,
+                accessTokenLength: tok?.accessToken?.length ?? 0,
+              },
+              "Firebase INTERNAL.getToken succeeded (FCM auth path)"
+            );
           } catch (tokenErr) {
             logger.error(
               {
@@ -164,7 +164,7 @@ try {
                 credentialSource: initCredentialSource,
                 projectId: serviceAccount.project_id,
               },
-              "Firebase service account cannot obtain OAuth access token — FCM will fail with missing-credential errors"
+              "Firebase INTERNAL.getToken failed — FCM sends will fail"
             );
           }
         })();

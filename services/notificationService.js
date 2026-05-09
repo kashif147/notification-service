@@ -47,17 +47,24 @@ const notificationService = {
       body: String(body || ""),
     };
     const mobileTarget = forceDataOnly || isMobilePlatform(platform);
+    const platformLower = String(platform || "").toLowerCase();
 
     const message = {
       token: fcmToken,
-      android: {
+      ...(Object.keys(data).length > 0 && { data }),
+    };
+
+    // Attach only the relevant platform block — mixing Android config with iOS tokens can trip edge cases.
+    if (platformLower === "android") {
+      message.android = {
         priority: "high",
         notification: {
           channelId: androidChannelId,
           sound: "default",
         },
-      },
-      apns: {
+      };
+    } else if (platformLower === "ios") {
+      message.apns = {
         headers: {
           "apns-priority": "10",
         },
@@ -67,9 +74,25 @@ const notificationService = {
             sound: "default",
           },
         },
-      },
-      ...(Object.keys(data).length > 0 && { data }),
-    };
+      };
+    } else if (mobileTarget) {
+      message.android = {
+        priority: "high",
+        notification: {
+          channelId: androidChannelId,
+          sound: "default",
+        },
+      };
+      message.apns = {
+        headers: { "apns-priority": "10" },
+        payload: {
+          aps: {
+            "content-available": 1,
+            sound: "default",
+          },
+        },
+      };
+    }
     // For mobile apps (Notifee path), send data-only so app fully controls display.
     if (!mobileTarget) {
       message.notification = {
@@ -84,6 +107,7 @@ const notificationService = {
           tokenPrefix: fcmToken?.substring(0, 10) + "...",
           androidPriority: message?.android?.priority,
           androidChannelId: message?.android?.notification?.channelId,
+          hasApnsBlock: !!message?.apns,
           platform: platform || "unknown",
           hasNotificationBlock: !!message?.notification,
           hasDataBlock: !!message?.data && Object.keys(message.data).length > 0,
@@ -93,7 +117,23 @@ const notificationService = {
         "FCM send config"
       );
 
-      const response = await admin.messaging().send(message);
+      const app = admin.app();
+      const oauth = await app.INTERNAL.getToken(false);
+      const accessLen = oauth?.accessToken ? oauth.accessToken.length : 0;
+      if (!oauth?.accessToken || typeof oauth.accessToken !== "string") {
+        logger.error(
+          {
+            accessTokenLength: accessLen,
+            firebaseProjectId: app.options?.projectId || process.env.GOOGLE_CLOUD_PROJECT,
+          },
+          "FCM send aborted: Firebase app INTERNAL.getToken returned no access token"
+        );
+        throw new Error(
+          "Firebase OAuth access token missing — check credentials and GCP/Firebase APIs (FCM)."
+        );
+      }
+
+      const response = await admin.messaging(app).send(message);
       logger.debug(
         { fcmToken: fcmToken.substring(0, 10) + "..." },
         "Notification sent successfully"
@@ -101,7 +141,13 @@ const notificationService = {
       return response;
     } catch (error) {
       logger.error(
-        { error: error.message, fcmToken: fcmToken?.substring(0, 10) + "..." },
+        {
+          error: error.message,
+          code: error.code,
+          fcmToken: fcmToken?.substring(0, 10) + "...",
+          hasHttpsProxy: !!process.env.HTTPS_PROXY,
+          hasHttpProxy: !!process.env.HTTP_PROXY,
+        },
         "Failed to send notification"
       );
       throw error;
