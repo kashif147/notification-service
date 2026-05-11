@@ -140,6 +140,9 @@ const notificationService = {
       );
       return response;
     } catch (error) {
+      const thirdPartyAuth =
+        error.code === "messaging/third-party-auth-error" &&
+        platformLower === "ios";
       logger.error(
         {
           error: error.message,
@@ -147,8 +150,14 @@ const notificationService = {
           fcmToken: fcmToken?.substring(0, 10) + "...",
           hasHttpsProxy: !!process.env.HTTPS_PROXY,
           hasHttpProxy: !!process.env.HTTP_PROXY,
+          ...(thirdPartyAuth && {
+            fcmIosHint:
+              "Firebase→APNs: In Firebase Console → Project settings → Cloud Messaging → Apple app configuration, upload a valid APNs Authentication Key (.p8) with correct Key ID and Team ID, or fix the APNs certificate. Ensure the iOS bundle ID matches the registered Firebase iOS app.",
+          }),
         },
-        "Failed to send notification"
+        thirdPartyAuth
+          ? "FCM failed for iOS (third-party-auth-error — usually APNs credentials in Firebase, not server OAuth)"
+          : "Failed to send notification"
       );
       throw error;
     }
