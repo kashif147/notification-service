@@ -140,23 +140,33 @@ const notificationService = {
       );
       return response;
     } catch (error) {
-      const thirdPartyAuth =
-        error.code === "messaging/third-party-auth-error" &&
-        platformLower === "ios";
+      const msg = String(error?.message || "");
+      const thirdPartyAuth = error.code === "messaging/third-party-auth-error";
+      const misleadingOAuthWording = msg.includes("Expected OAuth 2 access token");
+      const thirdPartyIos =
+        platformLower === "ios" && (thirdPartyAuth || misleadingOAuthWording);
       logger.error(
         {
-          error: error.message,
+          error: msg,
           code: error.code,
+          errorInfo: error.errorInfo || null,
+          misleadingOAuthWording,
           fcmToken: fcmToken?.substring(0, 10) + "...",
+          platform: platformLower || null,
           hasHttpsProxy: !!process.env.HTTPS_PROXY,
           hasHttpProxy: !!process.env.HTTP_PROXY,
-          ...(thirdPartyAuth && {
+          ...(thirdPartyIos && {
             fcmIosHint:
-              "Firebase→APNs: In Firebase Console → Project settings → Cloud Messaging → Apple app configuration, upload a valid APNs Authentication Key (.p8) with correct Key ID and Team ID, or fix the APNs certificate. Ensure the iOS bundle ID matches the registered Firebase iOS app.",
+              "Firebase→APNs (not Node OAuth): Google often returns OAuth wording for third-party-auth. If INTERNAL.getToken succeeded at startup, fix Apple app in Firebase Console → Cloud Messaging (.p8 Key ID + Team ID, bundle ID matches GoogleService-Info.plist; Apple key must enable APNs).",
           }),
+          ...(thirdPartyAuth &&
+            platformLower !== "ios" && {
+              fcmThirdPartyHint:
+                "third-party-auth: check the push channel for this platform in Firebase (e.g. Web Push VAPID, not server OAuth).",
+            }),
         },
-        thirdPartyAuth
-          ? "FCM failed for iOS (third-party-auth-error — usually APNs credentials in Firebase, not server OAuth)"
+        thirdPartyIos
+          ? "FCM failed for iOS (APNs/third-party — OAuth text is usually a red herring)"
           : "Failed to send notification"
       );
       throw error;
