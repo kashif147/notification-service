@@ -195,6 +195,23 @@ async function setupConsumers() {
       queue: APPLICATION_REVIEW_QUEUE,
     });
 
+    const JOURNAL_CREATED = "journal.created.v1";
+    const JOURNAL_QUEUE = "notification-service.journal.events";
+
+    await consumer.createQueue(JOURNAL_QUEUE, {
+      durable: true,
+      messageTtl: 3600000,
+    });
+
+    await consumer.bindQueue(JOURNAL_QUEUE, "journal.events", [JOURNAL_CREATED]);
+
+    const journalCreatedListener = require("./listeners/journalCreated.listener");
+
+    consumer.registerHandler(JOURNAL_CREATED, journalCreatedListener);
+    await consumer.consume(JOURNAL_QUEUE, { prefetch: 10 });
+
+    logger.info("Journal events consumer ready", { queue: JOURNAL_QUEUE });
+
     logger.info("All consumers set up successfully");
   } catch (error) {
     logger.error({ error: error.message }, "Failed to set up consumers");
