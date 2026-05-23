@@ -81,6 +81,7 @@ const bodyParser = require("body-parser");
 const firebaseRoutes = require("./routes/firebase.route.js");
 const notificationsRoutes = require("./routes/notifications.route.js");
 const notificationAdminRoutes = require("./routes/notification.admin.routes.js");
+const internalRealtimeRoutes = require("./routes/internal.realtime.route.js");
 const { authenticate, requireCrmUser } = require("./middlewares/auth.js");
 
 const app = express();
@@ -183,6 +184,7 @@ app.use(
   notificationAdminRoutes
 );
 app.use("/api/notifications", notificationsRoutes);
+app.use("/api/internal/realtime", internalRealtimeRoutes);
 
 app.get("/health", (req, res) => {
   res.status(200).json({ status: "UP" });

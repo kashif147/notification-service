@@ -40,14 +40,23 @@ async function start() {
   // JWT auth
   io.use((socket, next) => {
     try {
-      const token = socket.handshake.auth?.token;
+      const token =
+        socket.handshake.auth?.token || socket.handshake.query?.token;
       if (!token) return next(new Error("Unauthorized"));
 
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
+      const userId = decoded.sub || decoded.id;
+      const tenantId =
+        decoded.tenantId || decoded.tid || decoded.extension_tenantId;
+
+      if (!userId || !tenantId) {
+        return next(new Error("Invalid token: missing userId or tenantId"));
+      }
+
       socket.user = {
-        userId: decoded.id,
-        tenantId: decoded.tenantId,
+        userId,
+        tenantId,
       };
 
       next();

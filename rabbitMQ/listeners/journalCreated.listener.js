@@ -1,22 +1,11 @@
-const { getSocketIO } = require("../index");
 const logger = require("../../config/logger.js");
 const {
   FINANCE_DOC_TYPES,
   extractMemberId,
 } = require("../../helpers/journalFinanceRealtime.js");
-
-function emitMemberFinanceUpdated(io, { tenantId, memberId, profileId, docType, docNo }) {
-  const payload = {
-    memberId,
-    ...(profileId ? { profileId } : {}),
-    docType,
-    docNo,
-    timestamp: new Date().toISOString(),
-  };
-
-  io.to(`tenant:${tenantId}`).emit("memberFinanceUpdated", payload);
-  io.to(`tenant:${tenantId}`).emit("member:finance:updated", payload);
-}
+const {
+  emitMemberFinanceUpdated,
+} = require("../../services/memberFinanceRealtime.service");
 
 /**
  * journal.events → journal.created.v1
@@ -53,25 +42,11 @@ module.exports = async function handleJournalCreated(payload) {
     return;
   }
 
-  const io = getSocketIO();
-  if (!io) {
-    logger.warn(
-      { tenantId, memberId, docNo: data.docNo },
-      "journalCreated: Socket.IO not ready",
-    );
-    return;
-  }
-
-  emitMemberFinanceUpdated(io, {
+  emitMemberFinanceUpdated({
     tenantId: String(tenantId),
     memberId,
     profileId: data.profileId ? String(data.profileId) : undefined,
     docType,
     docNo: data.docNo,
   });
-
-  logger.info(
-    { tenantId, memberId, docType, docNo: data.docNo },
-    "journalCreated: emitted memberFinanceUpdated",
-  );
 };
