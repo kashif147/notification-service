@@ -6,18 +6,15 @@ const logger = require("../config/logger.js");
 
 const router = express.Router();
 
-function assertInternalKey(req, res, next) {
-  const expected = process.env.NOTIFICATION_INTERNAL_API_KEY || "";
-  if (!expected) {
-    return res.status(503).json({
+function assertInternalRequest(req, res, next) {
+  const isInternal =
+    req.headers["x-internal-request"] === "true" ||
+    req.headers["x-internal-request"] === "1";
+  if (!isInternal) {
+    return res.status(401).json({
       status: "error",
-      message: "Internal realtime API not configured",
+      message: "Internal endpoint: x-internal-request header required",
     });
-  }
-  const provided =
-    req.header("x-internal-api-key") || req.header("x-api-key") || "";
-  if (provided !== expected) {
-    return res.status(401).json({ status: "error", message: "Unauthorized" });
   }
   return next();
 }
@@ -28,7 +25,7 @@ function assertInternalKey(req, res, next) {
  */
 router.post(
   "/member-finance-updated",
-  assertInternalKey,
+  assertInternalRequest,
   (req, res) => {
     const { tenantId, memberId, profileId, docType, docNo } = req.body || {};
     if (!tenantId || !memberId) {
