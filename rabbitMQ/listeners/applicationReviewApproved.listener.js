@@ -44,12 +44,16 @@ function resolveMembershipCategory(effective, mergedSubscriptionDetails) {
 
 function formKindForPayment(paymentType) {
   const p = normalizePaymentType(paymentType).toLowerCase();
-  if (p === "standing order") return "SBO";
+  if (p === "standing order" || /\bstanding\b/.test(p) || p === "sbo") {
+    return "SBO";
+  }
   if (
     p === "salary deduction" ||
     p === "deduction" ||
     p === "deductions" ||
-    p === "payroll deduction"
+    p === "payroll deduction" ||
+    /\bsalary\b/.test(p) ||
+    /\bdeduction\b/.test(p)
   ) {
     return "SD19";
   }
@@ -170,24 +174,45 @@ module.exports = async function handleApplicationReviewApproved(payload) {
         ? "Submit Standing Order Form"
         : "Application approved";
 
-  await dispatchNotification(
-    {
-      tenantId,
-      userId,
-      title: notificationTitle,
-      body: bodyWithForm,
-      metadata: {
-        type: "APPLICATION_REVIEW_APPROVED",
-        sourceEventId: payload?.eventId || null,
-        sourceEventType: payload?.eventType || null,
-        applicationId,
-        profileId,
-        memberId: memberId != null ? String(memberId) : null,
-        ...(formKind ? { formKind } : {}),
-        ...(attachment ? { attachments: [attachment] } : {}),
-      },
+  const notificationEvent = {
+    tenantId,
+    userId,
+    title: notificationTitle,
+    body: bodyWithForm,
+    metadata: {
+      type: "APPLICATION_REVIEW_APPROVED",
+      sourceEventId: payload?.eventId || null,
+      sourceEventType: payload?.eventType || null,
+      applicationId,
+      profileId,
+      memberId: memberId != null ? String(memberId) : null,
+      ...(formKind ? { formKind } : {}),
+      ...(attachment ? { attachments: [attachment] } : {}),
     },
-    io,
-    onlineUsers
-  );
+  };
+
+  try {
+    await dispatchNotification(notificationEvent, io, onlineUsers);
+  } catch (err) {
+    logger.error(
+      {
+        err: err.message,
+        formKind,
+        applicationId,
+        hasAttachment: Boolean(attachment),
+      },
+      "applicationReviewApproved: dispatch failed; retrying without PDF attachment"
+    );
+    if (!attachment) throw err;
+    const { attachments: _pdf, ...metadataWithoutAttachments } =
+      notificationEvent.metadata;
+    await dispatchNotification(
+      {
+        ...notificationEvent,
+        metadata: metadataWithoutAttachments,
+      },
+      io,
+      onlineUsers
+    );
+  }
 };

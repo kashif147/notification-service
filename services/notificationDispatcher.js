@@ -19,6 +19,7 @@ const FCMToken = require("../models/fcmToken.model");
 const notificationService = require("./notificationService");
 const {
   metadataHasAttachmentPayload,
+  stripAttachmentsFromMetadata,
 } = require("../helpers/notificationAttachmentMetadata.js");
 
 function dedupeTokensByDevice(tokens = []) {
@@ -115,7 +116,8 @@ async function dispatchNotification(event, io, onlineUsers) {
       body: notification.body,
       isRead: !!notification.isRead,
       createdAt: notification.createdAt,
-      metadata: notification.metadata || {},
+      metadata:
+        stripAttachmentsFromMetadata(notification.metadata || {}) || {},
     };
     io.to(`user:${userId}`).emit("notification", payload);
     io.to(`user:${userId}`).emit("badgeIncrement", { count: 1 });

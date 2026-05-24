@@ -140,6 +140,7 @@ async function setupConsumers() {
 
     const MEMBER_NOTIFICATION_REQUESTED =
       "members.member.notification.requested.v1";
+    const PAYMENT_FORM_APPROVED = "members.payment-form.approved.v1";
 
     await consumer.bindQueue(MEMBERSHIP_QUEUE, "membership.events", [
       SUBSCRIPTION_CURRENT_UPDATED,
@@ -147,6 +148,7 @@ async function setupConsumers() {
       "members.subscription.resignation.undone.v1",
       "members.subscription.category.changed.v1",
       MEMBER_NOTIFICATION_REQUESTED,
+      PAYMENT_FORM_APPROVED,
     ]);
 
     const subscriptionCreatedListener = require("./listeners/subscriptionCreated.listener");
@@ -154,6 +156,7 @@ async function setupConsumers() {
     const subscriptionResignationUndoneListener = require("./listeners/subscriptionResignationUndone.listener");
     const subscriptionCategoryChangedListener = require("./listeners/subscriptionCategoryChanged.listener");
     const memberNotificationRequestedListener = require("./listeners/memberNotificationRequested.listener");
+    const paymentFormApprovedListener = require("./listeners/paymentFormApproved.listener");
 
     consumer.registerHandler(SUBSCRIPTION_CURRENT_UPDATED, subscriptionCreatedListener);
     consumer.registerHandler("members.subscription.resigned.v1", subscriptionResignedListener);
@@ -166,6 +169,7 @@ async function setupConsumers() {
       MEMBER_NOTIFICATION_REQUESTED,
       memberNotificationRequestedListener
     );
+    consumer.registerHandler(PAYMENT_FORM_APPROVED, paymentFormApprovedListener);
     await consumer.consume(MEMBERSHIP_QUEUE, { prefetch: 10 });
 
     logger.info("Membership events consumer ready", { queue: MEMBERSHIP_QUEUE });
