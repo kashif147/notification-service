@@ -11,18 +11,24 @@ module.exports = async function handleBatchProcessQueued(payload) {
 
   if (!userId) return;
 
+  const isDdPrepare = String(data.kind || "") === "DD_PREPARE";
   const batchName = String(data.batchName || "").trim() || "Batch";
   const totalTransactions = Number(data.totalTransactions || 0);
-  const title = `Batch ${batchName} is queued for processing.`;
+  const title = isDdPrepare
+    ? `Prepare started for ${batchName}.`
+    : `Batch ${batchName} is queued for processing.`;
+  const body = isDdPrepare
+    ? "Building eligible members in the background. You will be notified when ready."
+    : "Batch has been queued.";
 
   await dispatchNotification(
     {
       tenantId: data.tenantId,
       userId,
       title,
-      body: "Batch has been queued.",
+      body,
       metadata: {
-        type: "BATCH_PROCESS_QUEUED",
+        type: isDdPrepare ? "DD_PREPARE_QUEUED" : "BATCH_PROCESS_QUEUED",
         sourceEventId: payload?.eventId || null,
         sourceEventType: payload?.eventType || null,
         batchDetailId: data.batchDetailId,
