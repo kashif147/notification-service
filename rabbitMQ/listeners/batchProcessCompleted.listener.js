@@ -51,6 +51,14 @@ module.exports = async function handleBatchProcessCompleted(payload) {
         processedTransactions: Number(data.processedTransactions || 0),
         failedTransactions: Number(data.failedTransactions || 0),
         totalTransactions,
+        ...(isDdPrepare
+          ? {
+              runId: data.runId || data.batchDetailId || null,
+              runNo: data.runNo || null,
+              included: Number(data.included || 0),
+              excluded: Number(data.excluded || 0),
+            }
+          : {}),
       },
     },
     io,

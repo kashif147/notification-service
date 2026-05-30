@@ -37,6 +37,12 @@ module.exports = async function handleBatchProcessQueued(payload) {
         description: data.description || null,
         totalTransactions,
         status: "queued",
+        ...(isDdPrepare
+          ? {
+              runId: data.runId || data.batchDetailId || null,
+              runNo: data.runNo || null,
+            }
+          : {}),
       },
     },
     io,
