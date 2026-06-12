@@ -11,8 +11,16 @@ function toTemplateResponse(doc) {
 
 class NotificationFilterTemplateService {
   async createTemplate(tenantId, userId, templateData) {
-    const { name, templateType, filters, columns, isDefault, pinned } =
-      templateData;
+    const {
+      name,
+      templateType,
+      filters,
+      columns,
+      columnLabels,
+      visibleFilters,
+      isDefault,
+      pinned,
+    } = templateData;
     const type = templateType || "notification";
 
     if (isDefault) {
@@ -35,6 +43,8 @@ class NotificationFilterTemplateService {
       templateType: type,
       filters: filters || {},
       columns: columns || [],
+      columnLabels: columnLabels || {},
+      visibleFilters: Array.isArray(visibleFilters) ? visibleFilters : [],
       isDefault: isDefault || false,
       pinned: pinned || false,
     });
@@ -102,8 +112,16 @@ class NotificationFilterTemplateService {
   }
 
   async updateTemplate(templateId, tenantId, userId, updateData) {
-    const { name, templateType, filters, columns, isDefault, pinned } =
-      updateData;
+    const {
+      name,
+      templateType,
+      filters,
+      columns,
+      columnLabels,
+      visibleFilters,
+      isDefault,
+      pinned,
+    } = updateData;
 
     let template = await Template.findOne({
       _id: templateId,
@@ -171,6 +189,14 @@ class NotificationFilterTemplateService {
     }
     if (columns !== undefined) {
       template.columns = columns;
+    }
+    if (columnLabels !== undefined) {
+      template.columnLabels = columnLabels;
+    }
+    if (visibleFilters !== undefined) {
+      template.visibleFilters = Array.isArray(visibleFilters)
+        ? visibleFilters
+        : [];
     }
     if (isDefault !== undefined) {
       template.isDefault = isDefault;

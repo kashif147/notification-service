@@ -2,7 +2,6 @@ const Joi = require("joi");
 const {
   FILTER_OPERATOR,
   ALLOWED_NOTIFICATION_FILTER_KEYS,
-  NOTIFICATION_RESPONSE_COLUMNS,
 } = require("../constants/notificationTemplate.js");
 
 const filterEntrySchema = Joi.object({
@@ -22,10 +21,12 @@ const filter_template_create = Joi.object({
     )
     .optional()
     .default({}),
-  columns: Joi.array()
-    .items(Joi.string().valid(...NOTIFICATION_RESPONSE_COLUMNS))
+  columns: Joi.array().items(Joi.string().trim()).optional().default([]),
+  columnLabels: Joi.object()
+    .pattern(Joi.string().trim(), Joi.string().trim())
     .optional()
-    .default([]),
+    .default({}),
+  visibleFilters: Joi.array().items(Joi.string().trim()).optional().default([]),
   isDefault: Joi.boolean().optional().default(false),
   pinned: Joi.boolean().optional().default(false),
 });
@@ -39,9 +40,11 @@ const filter_template_update = Joi.object({
       filterEntrySchema
     )
     .optional(),
-  columns: Joi.array()
-    .items(Joi.string().valid(...NOTIFICATION_RESPONSE_COLUMNS))
+  columns: Joi.array().items(Joi.string().trim()).optional(),
+  columnLabels: Joi.object()
+    .pattern(Joi.string().trim(), Joi.string().trim())
     .optional(),
+  visibleFilters: Joi.array().items(Joi.string().trim()).optional(),
   isDefault: Joi.boolean().optional(),
   pinned: Joi.boolean().optional(),
 }).min(0);

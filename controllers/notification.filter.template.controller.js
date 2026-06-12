@@ -5,6 +5,18 @@ const {
 } = require("../validation/notificationTemplate.validation.js");
 const { AppError } = require("../errors/AppError.js");
 
+function normalizeTemplateRequestBody(body = {}) {
+  const normalized = { ...body };
+  if (
+    normalized.visibleFilters == null &&
+    Array.isArray(normalized.meta?.visibleToolbarFilters)
+  ) {
+    normalized.visibleFilters = normalized.meta.visibleToolbarFilters;
+  }
+  delete normalized.meta;
+  return normalized;
+}
+
 function crmContext(req) {
   const tenantId = req.tenantId || req.ctx?.tenantId;
   const userId = String(req.user?.sub || req.user?.id || req.userId || "");
@@ -14,7 +26,9 @@ function crmContext(req) {
 exports.createTemplate = async (req, res, next) => {
   try {
     const { tenantId, userId } = crmContext(req);
-    const validated = await filter_template_create.validateAsync(req.body);
+    const validated = await filter_template_create.validateAsync(
+      normalizeTemplateRequestBody(req.body),
+    );
     const template = await notificationFilterTemplateService.createTemplate(
       tenantId,
       userId,
@@ -71,7 +85,9 @@ exports.getTemplateById = async (req, res, next) => {
 exports.updateTemplate = async (req, res, next) => {
   try {
     const { tenantId, userId } = crmContext(req);
-    const validated = await filter_template_update.validateAsync(req.body);
+    const validated = await filter_template_update.validateAsync(
+      normalizeTemplateRequestBody(req.body),
+    );
     const template = await notificationFilterTemplateService.updateTemplate(
       req.params.templateId,
       tenantId,

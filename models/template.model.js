@@ -31,6 +31,14 @@ const TemplateSchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
+    columnLabels: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {},
+    },
+    visibleFilters: {
+      type: [String],
+      default: [],
+    },
     /** User’s default view — the only “default view” product flag. */
     isDefault: {
       type: Boolean,
