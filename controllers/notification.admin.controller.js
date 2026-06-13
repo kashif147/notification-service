@@ -6,6 +6,9 @@ const {
   stripAttachmentsFromMetadata,
 } = require("../helpers/notificationAttachmentMetadata.js");
 const {
+  hydrateLetterAttachments,
+} = require("../helpers/communicationLetterClient.js");
+const {
   buildNotificationMongoQueryFromTemplateFilters,
   filterByColumns,
 } = require("../helpers/notificationListTemplate.js");
@@ -126,6 +129,9 @@ exports.getNotificationAdminById = async (req, res, next) => {
       );
     }
 
+    let metadata = doc.metadata || {};
+    metadata = await hydrateLetterAttachments(metadata, tenantId);
+
     return res.success({
       notification: {
         _id: doc._id,
@@ -139,7 +145,7 @@ exports.getNotificationAdminById = async (req, res, next) => {
         updatedAt: doc.updatedAt,
         sentAt: doc.sentAt,
         readAt: doc.readAt,
-        metadata: doc.metadata || {},
+        metadata,
         firebaseMessageId: doc.firebaseMessageId,
         error: doc.error,
       },

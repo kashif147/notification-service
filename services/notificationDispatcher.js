@@ -58,6 +58,7 @@ function isInvalidOrUnregisteredTokenError(err) {
 
 async function dispatchNotification(event, io, onlineUsers) {
   const { tenantId, userId, title, body, metadata = {} } = event;
+  const deliverPush = metadata.deliverPush !== false;
   const sourceEventId = metadata?.sourceEventId
     ? String(metadata.sourceEventId)
     : null;
@@ -108,8 +109,8 @@ async function dispatchNotification(event, io, onlineUsers) {
   const shouldUseMobileFcm = mobileTokens.length > 0;
   const isOnline = onlineUsers?.has(userKey);
 
-  // 2. Emit portal real-time when user is online.
-  if (isOnline && io) {
+  // 2. Emit portal real-time when user is online (skip for correspondence-only rows e.g. email audit).
+  if (deliverPush && isOnline && io) {
     const payload = {
       _id: notification._id,
       title: notification.title,
@@ -123,11 +124,11 @@ async function dispatchNotification(event, io, onlineUsers) {
     io.to(`user:${userId}`).emit("badgeIncrement", { count: 1 });
   }
 
-  // 3. Send Firebase push to all active devices.
+  // 3. Send Firebase push to all active devices (skip when deliverPush is false).
   const candidateTokens = shouldUseMobileFcm
     ? mobileTokens
     : dedupeTokensByDevice(allActiveTokens);
-  const tokens = candidateTokens;
+  const tokens = deliverPush ? candidateTokens : [];
 
   const fcmData =
     metadataHasAttachmentPayload(metadata) ? { hasAttachments: "true" } : null;
@@ -167,16 +168,21 @@ async function dispatchNotification(event, io, onlineUsers) {
     notification.error =
       failedSends > 0 ? `Partial failure: ${failureReasons.join(" | ")}` : null;
   } else if (failedSends > 0) {
-    // Push failed; do not imply FCM succeeded just because Socket.IO delivered.
-    notification.status = isOnline && io ? "sent" : "failed";
+    notification.status = deliverPush && isOnline && io ? "sent" : "failed";
     notification.firebaseMessageId = null;
     notification.error = failureReasons.join(" | ");
   } else {
-    notification.status = isOnline && io ? "delivered" : "failed";
-    notification.firebaseMessageId = null;
-    notification.error = isOnline && io
-      ? null
-      : "No active FCM tokens found for user";
+    if (!deliverPush) {
+      notification.status = "sent";
+      notification.firebaseMessageId = null;
+      notification.error = null;
+    } else {
+      notification.status = isOnline && io ? "delivered" : "failed";
+      notification.firebaseMessageId = null;
+      notification.error = isOnline && io
+        ? null
+        : "No active FCM tokens found for user";
+    }
   }
   await notification.save();
 
