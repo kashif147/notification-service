@@ -32,7 +32,7 @@ function resolveWorkLocation(effective) {
   return ow;
 }
 
-/** Membership category label from subscription details (e.g. application-approved payload). */
+/** Membership category label from subscription details (e.g. application-processed payload). */
 function resolveMembershipCategory(effective, mergedSubscriptionDetails) {
   const raw =
     mergedSubscriptionDetails?.membershipCategory ??
@@ -60,7 +60,7 @@ function formKindForPayment(paymentType) {
   return null;
 }
 
-module.exports = async function handleApplicationReviewApproved(payload) {
+module.exports = async function handleApplicationReviewProcessed(payload) {
   const data = payload?.data || payload;
   const tenantId = data?.tenantId ?? payload?.tenantId;
   const userId = data?.userId;
@@ -73,7 +73,7 @@ module.exports = async function handleApplicationReviewApproved(payload) {
   if (!userId || !tenantId) {
     logger.debug(
       { userId, tenantId, applicationId: data?.applicationId },
-      "applicationReviewApproved: Skipping notification — userId or tenantId missing"
+      "applicationReviewProcessed: Skipping notification — userId or tenantId missing"
     );
     return;
   }
@@ -164,7 +164,7 @@ module.exports = async function handleApplicationReviewApproved(payload) {
       : "";
     bodyWithForm = `You have chosen to pay by Standing Order for your ${beforeMembership}membership. Please set up your Standing Order using your banking App.${attachedDetailsSentence} Kindly return a signed copy by post or your membership companion mobile app.`;
   } else {
-    bodyWithForm = "Your membership application has been approved.";
+    bodyWithForm = "Your membership application has been processed.";
   }
 
   const notificationTitle =
@@ -172,7 +172,7 @@ module.exports = async function handleApplicationReviewApproved(payload) {
       ? "Submit Salary Deduction Form"
       : formKind === "SBO"
         ? "Submit Standing Order Form"
-        : "Application approved";
+        : "Application processed";
 
   const notificationEvent = {
     tenantId,
@@ -180,7 +180,7 @@ module.exports = async function handleApplicationReviewApproved(payload) {
     title: notificationTitle,
     body: bodyWithForm,
     metadata: {
-      type: "APPLICATION_REVIEW_APPROVED",
+      type: "APPLICATION_REVIEW_PROCESSED",
       sourceEventId: payload?.eventId || null,
       sourceEventType: payload?.eventType || null,
       applicationId,
@@ -201,7 +201,7 @@ module.exports = async function handleApplicationReviewApproved(payload) {
         applicationId,
         hasAttachment: Boolean(attachment),
       },
-      "applicationReviewApproved: dispatch failed; retrying without PDF attachment"
+      "applicationReviewProcessed: dispatch failed; retrying without PDF attachment"
     );
     if (!attachment) throw err;
     const { attachments: _pdf, ...metadataWithoutAttachments } =

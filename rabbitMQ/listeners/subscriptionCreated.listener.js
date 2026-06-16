@@ -15,10 +15,13 @@ module.exports = async function handleSubscriptionCreated(payload) {
     return;
   }
 
-  if (data?.skipMembershipApprovedNotification === true) {
+  if (
+    data?.skipMembershipProcessedNotification === true ||
+    data?.skipMembershipApprovedNotification === true
+  ) {
     logger.debug(
       { userId, tenantId },
-      "Skipping Membership Approved notification (reactivation / current.updated without welcome)"
+      "Skipping Membership Processed notification (reactivation / current.updated without welcome)"
     );
     return;
   }
@@ -30,10 +33,10 @@ module.exports = async function handleSubscriptionCreated(payload) {
     {
       tenantId,
       userId,
-      title: "Membership Approved",
-      body: "Your membership application has been approved. Welcome to the membership!",
+      title: "Membership Processed",
+      body: "Your membership application has been processed. Welcome to the membership!",
       metadata: {
-        type: "APPLICATION_APPROVED_SUBSCRIPTION_CREATED",
+        type: "APPLICATION_PROCESSED_SUBSCRIPTION_CREATED",
         sourceEventId: payload?.eventId || null,
         sourceEventType: payload?.eventType || null,
         subscriptionId: data?.subscriptionId,

@@ -129,7 +129,7 @@ async function setupConsumers() {
       queue: NOTIFICATION_QUEUE,
     });
 
-    // Membership events: application approved + subscription created
+    // Membership events: application processed + subscription created
     const SUBSCRIPTION_CURRENT_UPDATED = "members.subscription.current.updated.v1";
     const MEMBERSHIP_QUEUE = "notification-service.membership.events";
 
@@ -175,7 +175,7 @@ async function setupConsumers() {
     logger.info("Membership events consumer ready", { queue: MEMBERSHIP_QUEUE });
 
     const APPLICATION_REVIEW_QUEUE = "notification-service.application.events";
-    const APP_REVIEW_APPROVED = "applications.review.approved.v1";
+    const APP_REVIEW_PROCESSED = "applications.review.processed.v1";
     const APP_REVIEW_REJECTED = "applications.review.rejected.v1";
 
     await consumer.createQueue(APPLICATION_REVIEW_QUEUE, {
@@ -184,14 +184,14 @@ async function setupConsumers() {
     });
 
     await consumer.bindQueue(APPLICATION_REVIEW_QUEUE, "application.events", [
-      APP_REVIEW_APPROVED,
+      APP_REVIEW_PROCESSED,
       APP_REVIEW_REJECTED,
     ]);
 
-    const applicationReviewApprovedListener = require("./listeners/applicationReviewApproved.listener");
+    const applicationReviewProcessedListener = require("./listeners/applicationReviewProcessed.listener");
     const applicationReviewRejectedListener = require("./listeners/applicationReviewRejected.listener");
 
-    consumer.registerHandler(APP_REVIEW_APPROVED, applicationReviewApprovedListener);
+    consumer.registerHandler(APP_REVIEW_PROCESSED, applicationReviewProcessedListener);
     consumer.registerHandler(APP_REVIEW_REJECTED, applicationReviewRejectedListener);
     await consumer.consume(APPLICATION_REVIEW_QUEUE, { prefetch: 10 });
 
