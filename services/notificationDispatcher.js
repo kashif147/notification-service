@@ -121,7 +121,6 @@ async function dispatchNotification(event, io, onlineUsers) {
         stripAttachmentsFromMetadata(notification.metadata || {}) || {},
     };
     io.to(`user:${userId}`).emit("notification", payload);
-    io.to(`user:${userId}`).emit("badgeIncrement", { count: 1 });
   }
 
   // 3. Send Firebase push to all active devices (skip when deliverPush is false).
