@@ -176,7 +176,7 @@ async function dispatchNotification(event, io, onlineUsers) {
       notification.firebaseMessageId = null;
       notification.error = null;
     } else {
-      notification.status = isOnline && io ? "delivered" : "failed";
+      notification.status = isOnline && io ? "delivered" : "sent";
       notification.firebaseMessageId = null;
       notification.error = isOnline && io
         ? null
