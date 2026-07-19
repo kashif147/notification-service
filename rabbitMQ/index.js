@@ -46,6 +46,7 @@ async function initEventSystem() {
       prefetch: 10,
       connectionName: "notification-service",
       serviceName: "notification-service",
+      exchanges: [{ name: "events.events", type: "topic", options: { durable: true } }],
     });
     logger.info("Event system initialized with middleware");
   } catch (error) {
@@ -215,6 +216,26 @@ async function setupConsumers() {
     await consumer.consume(JOURNAL_QUEUE, { prefetch: 10 });
 
     logger.info("Journal events consumer ready", { queue: JOURNAL_QUEUE });
+
+    // Events/courses registration notifications (events.events exchange)
+    const EVENTS_QUEUE = "notification-service.events.events";
+    const REGISTRATION_CONFIRMED = "events.registration.confirmed.v1";
+    const CERTIFICATE_ISSUED = "events.certificate.issued.v1";
+
+    await consumer.createQueue(EVENTS_QUEUE, { durable: true, messageTtl: 3600000 });
+    await consumer.bindQueue(EVENTS_QUEUE, "events.events", [
+      REGISTRATION_CONFIRMED,
+      CERTIFICATE_ISSUED,
+    ]);
+
+    const eventRegistrationConfirmedListener = require("./listeners/eventRegistrationConfirmed.listener");
+    const certificateIssuedListener = require("./listeners/certificateIssued.listener");
+
+    consumer.registerHandler(REGISTRATION_CONFIRMED, eventRegistrationConfirmedListener);
+    consumer.registerHandler(CERTIFICATE_ISSUED, certificateIssuedListener);
+    await consumer.consume(EVENTS_QUEUE, { prefetch: 10 });
+
+    logger.info("Events/courses registration consumer ready", { queue: EVENTS_QUEUE });
 
     logger.info("All consumers set up successfully");
   } catch (error) {
