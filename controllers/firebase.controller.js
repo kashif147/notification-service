@@ -4,6 +4,9 @@ const NotificationHistory = require("../models/notificationHistory.model.js");
 const mongoose = require("mongoose");
 const logger = require("../config/logger.js");
 const axios = require("axios");
+const {
+  stripAttachmentsFromMetadata,
+} = require("../helpers/notificationAttachmentMetadata.js");
 
 // Helper function to fetch profiles by user IDs from profile-service
 async function fetchProfilesByUserIds(userIds, req = null) {
@@ -657,12 +660,20 @@ const sendFirebaseNotification = {
       }
 
       // Query automatically excludes soft-deleted records via middleware
-      const notifications = await NotificationHistory.find(query)
+      const rawNotifications = await NotificationHistory.find(query)
         .select("-__v -fcmToken") // Exclude sensitive fields
         .sort({ createdAt: -1 }) // Most recent first
         .limit(parseInt(limit))
         .skip(skip)
         .lean();
+
+      // List endpoint — strip base64 PDF attachment payloads down to {hasData, size} before
+      // returning. Skipping this ships megabytes of base64 per notification with an attachment;
+      // GET /api/notifications/:id is the intended place to fetch the full payload.
+      const notifications = rawNotifications.map((n) => ({
+        ...n,
+        metadata: stripAttachmentsFromMetadata(n.metadata || {}) || {},
+      }));
 
       const total = await NotificationHistory.countDocuments(query);
       const unreadCount = await NotificationHistory.countDocuments({
