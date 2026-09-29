@@ -83,6 +83,7 @@ const notificationsRoutes = require("./routes/notifications.route.js");
 const notificationAdminRoutes = require("./routes/notification.admin.routes.js");
 const internalRealtimeRoutes = require("./routes/internal.realtime.route.js");
 const { authenticate, requireCrmUser } = require("./middlewares/auth.js");
+const { tenantContextWarn } = require("./middlewares/tenantContext.mw.js");
 
 const app = express();
 
@@ -180,6 +181,7 @@ app.use("/api/firebase", firebaseRoutes);
 app.use(
   "/api/notifications/admin",
   authenticate,
+  tenantContextWarn,
   requireCrmUser,
   notificationAdminRoutes
 );

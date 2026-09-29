@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const sendFirebaseNotification = require("../controllers/firebase.controller");
 const { authenticate } = require("../middlewares/auth");
+const { tenantContextWarn } = require("../middlewares/tenantContext.mw");
 
 // Token registration endpoints
 router.post("/register-token", sendFirebaseNotification.registerToken);
@@ -19,21 +20,25 @@ router.post("/send-notification", sendFirebaseNotification.sendNotification);
 router.get(
   "/notifications",
   authenticate,
+  tenantContextWarn,
   sendFirebaseNotification.getNotifications
 );
 router.post(
   "/notifications/mark-read",
   authenticate,
+  tenantContextWarn,
   sendFirebaseNotification.markAsRead
 );
 router.delete(
   "/notifications/:notificationId",
   authenticate,
+  tenantContextWarn,
   sendFirebaseNotification.deleteNotification
 );
 router.delete(
   "/notifications",
   authenticate,
+  tenantContextWarn,
   sendFirebaseNotification.deleteAllNotifications
 );
 

@@ -2,6 +2,7 @@ const express = require("express");
 const mongoose = require("mongoose");
 const router = express.Router();
 const { authenticate } = require("../middlewares/auth");
+const { tenantContextWarn } = require("../middlewares/tenantContext.mw");
 const NotificationHistory = require("../models/notificationHistory.model");
 const {
   stripAttachmentsFromMetadata,
@@ -10,6 +11,7 @@ const {
 router.get(
   "/",
   authenticate,
+  tenantContextWarn,
   async (req, res) => {
     try {
       const userId = req.user?.id || req.user?.sub || req.userId;
@@ -56,6 +58,7 @@ router.get(
 router.get(
   "/:id",
   authenticate,
+  tenantContextWarn,
   async (req, res) => {
     try {
       const userId = req.user?.id || req.user?.sub || req.userId;
