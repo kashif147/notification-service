@@ -115,26 +115,28 @@ test("6 admin router defines 10 route registrations (all under the single guarde
   assert.equal(defs, 10);
   assert.ok(!adminSrc().includes("tenantContextWarn"), "admin router file unchanged (guarded at mount)");
 });
-test("7 firebase authenticated guard count = 4", () => {
-  assert.equal((fbSrc().match(/^\s*tenantContextWarn,\s*$/gm) || []).length, 4);
+// Phase 2B0: the 5 formerly-unauthenticated firebase token/send routes are now authenticated
+// too, so firebase guard coverage went 4 -> 9 and the total 16 -> 21 (tests 7, 9, 10, 12).
+test("7 firebase authenticated guard count = 9", () => {
+  assert.equal((fbSrc().match(/^\s*tenantContextWarn,\s*$/gm) || []).length, 9);
 });
 test("8 notifications authenticated guard count = 2", () => {
   assert.equal((notifSrc().match(/^\s*tenantContextWarn,\s*$/gm) || []).length, 2);
 });
-test("9 total authenticated coverage = 16 (10 admin + 4 firebase + 2 notifications)", () => {
+test("9 total authenticated coverage = 21 (10 admin + 9 firebase + 2 notifications)", () => {
   const admin = 10; // single mount covers all
   const fb = (fbSrc().match(/^\s*tenantContextWarn,\s*$/gm) || []).length;
   const nt = (notifSrc().match(/^\s*tenantContextWarn,\s*$/gm) || []).length;
-  assert.equal(admin + fb + nt, 16);
+  assert.equal(admin + fb + nt, 21);
 });
-test("10 firebase guarded ordering: authenticate -> tenantContextWarn -> handler (x4)", () => {
-  assert.equal(orderedGuardCount(fbSrc()), 4);
+test("10 firebase guarded ordering: authenticate -> tenantContextWarn -> handler (x9)", () => {
+  assert.equal(orderedGuardCount(fbSrc()), 9);
   assert.ok(!/tenantContextWarn,\s*\n\s*authenticate,/.test(fbSrc()), "guard never before authenticate");
 });
 test("11 notifications guarded ordering: authenticate -> tenantContextWarn -> handler (x2)", () => {
   assert.equal(orderedGuardCount(notifSrc()), 2);
 });
-test("12 the 5 unauthenticated firebase routes remain unguarded", () => {
+test("12 Phase 2B0: the 5 firebase token/send routes are authenticated (3 also CRM-only)", () => {
   const s = fbSrc();
   for (const line of [
     'router.post("/register-token", sendFirebaseNotification.registerToken);',
@@ -143,7 +145,17 @@ test("12 the 5 unauthenticated firebase routes remain unguarded", () => {
     'router.get("/tokens/filter", sendFirebaseNotification.getFilteredTokens);',
     'router.post("/send-notification", sendFirebaseNotification.sendNotification);',
   ]) {
-    assert.ok(s.includes(line), `unauth route present & unchanged: ${line}`);
+    assert.ok(!s.includes(line), `no longer unauthenticated: ${line}`);
+  }
+  for (const [route, handler] of [
+    ['"/tokens"', "getAllActiveTokens"],
+    ['"/tokens/filter"', "getFilteredTokens"],
+    ['"/send-notification"', "sendNotification"],
+  ]) {
+    const re = new RegExp(
+      `${route.replace(/[/.]/g, "\\$&")},\\s*authenticate,\\s*tenantContextWarn,\\s*requireCrmUser,\\s*sendFirebaseNotification\\.${handler}`
+    );
+    assert.match(s, re, `${route} is authenticate -> tenantContextWarn -> requireCrmUser`);
   }
 });
 test("13 internal realtime remains unguarded", () => {

@@ -82,25 +82,59 @@ async function fetchProfilesByUserIds(userIds, req = null) {
   }
 }
 
+// Trusted identity from authenticate (+ the tenant-context guard). Body/query tenantId and
+// userId are never authoritative on the firebase routes.
+const trustedTenantId = (req) => req.ctx?.tenantId || req.tenantId || req.user?.tenantId;
+const trustedUserId = (req) =>
+  req.ctx?.userId || req.userId || req.user?.id || req.user?.sub;
+
+const MAX_SEND_RECIPIENTS = 1000;
+function normalizeUserIds(raw) {
+  const list = Array.isArray(raw) ? raw : raw === undefined || raw === null ? [] : [raw];
+  return [
+    ...new Set(
+      list
+        .filter((v) => typeof v === "string" || typeof v === "number")
+        .map((v) => String(v).trim())
+        .filter(Boolean)
+    ),
+  ];
+}
+
 const sendFirebaseNotification = {
-  // Register/Update FCM token for a user
+  // Register/Update FCM token for the authenticated caller (self-service only)
   registerToken: async (req, res) => {
     try {
-      const { fcmToken, userId, deviceId, platform } = req.body;
-      const tenantId = req.user?.tenantId || req.body.tenantId;
+      const { fcmToken, deviceId, platform } = req.body;
+      const tenantId = trustedTenantId(req);
+      const userId = trustedUserId(req);
 
-      if (!fcmToken || !userId) {
-        return res.status(400).json({
-          message: "Missing required fields: fcmToken and userId are required",
+      if (!tenantId || !userId) {
+        return res.status(401).json({
+          message: "Authenticated user and tenant are required",
           success: false,
         });
       }
 
-      if (!tenantId) {
+      if (!fcmToken || typeof fcmToken !== "string") {
         return res.status(400).json({
-          message: "Missing tenantId",
+          message: "Missing required field: fcmToken",
           success: false,
         });
+      }
+
+      // A caller may only register a device to their own account: body.userId is ignored and
+      // the token is always bound to the trusted caller. (Not rejected, because clients decode
+      // the JWT themselves and may send a different claim, e.g. sub vs id, for the same user.)
+      if (
+        req.body.userId !== undefined &&
+        req.body.userId !== null &&
+        String(req.body.userId) !== String(userId)
+      ) {
+        logger.warn(
+          { trustedUserId: userId, tenantId },
+          "register-token: body userId differs from authenticated user; binding to authenticated user"
+        );
       }
 
       // Upsert: Update if exists, create if not
@@ -166,19 +200,25 @@ const sendFirebaseNotification = {
   unregisterToken: async (req, res) => {
     try {
       const { fcmToken } = req.body;
-      const tenantId = req.user?.tenantId || req.body.tenantId;
-      const userId = req.user?.id || req.user?.sub || req.body.userId;
+      const tenantId = trustedTenantId(req);
+      const userId = trustedUserId(req);
 
-      if (!fcmToken) {
+      if (!tenantId || !userId) {
+        return res.status(401).json({
+          message: "Authenticated user and tenant are required",
+          success: false,
+        });
+      }
+
+      if (!fcmToken || typeof fcmToken !== "string") {
         return res.status(400).json({
           message: "Missing required field: fcmToken",
           success: false,
         });
       }
 
-      const query = { fcmToken };
-      if (tenantId) query.tenantId = tenantId;
-      if (userId) query.userId = userId;
+      // Only the caller's own token in the caller's own tenant can be deactivated.
+      const query = { fcmToken, tenantId, userId };
 
       const tokenData = await FCMToken.findOneAndUpdate(
         query,
@@ -212,18 +252,20 @@ const sendFirebaseNotification = {
     }
   },
 
-  // Send notification - supports both direct fcmToken and userId-based retrieval
+  // Send notification (CRM only) to recipients inside the caller's trusted tenant.
+  // Targets: body.userId (string or array) resolved to that tenant's active tokens, or a raw
+  // fcmToken that must belong to an active token record in the caller's tenant.
   sendNotification: async (req, res) => {
     try {
-      const { title, body, fcmToken, userId } = req.body;
+      const { title, body, fcmToken } = req.body;
+      const tenantId = trustedTenantId(req);
 
-      // Extract tenantId and userId from JWT token as primary source
-      const jwtTenantId = req.user?.tenantId || req.tenantId;
-      const jwtUserId = req.user?.id || req.user?.sub || req.userId;
-
-      // Use JWT values as fallback, then body, then query
-      let tenantId = jwtTenantId || req.body.tenantId;
-      let targetUserId = userId || jwtUserId;
+      if (!tenantId) {
+        return res.status(401).json({
+          message: "Authenticated tenant is required",
+          success: false,
+        });
+      }
 
       if (!title || !body) {
         return res.status(400).json({
@@ -232,26 +274,47 @@ const sendFirebaseNotification = {
         });
       }
 
-      let tokensToSend = [];
+      let targets = [];
 
-      // If fcmToken provided directly, use it
       if (fcmToken) {
-        tokensToSend = [fcmToken];
-      }
-      // If userId provided, retrieve tokens from database
-      else if (targetUserId) {
-        if (!tenantId) {
+        if (typeof fcmToken !== "string") {
           return res.status(400).json({
-            message: "tenantId is required when using userId",
+            message: "fcmToken must be a string",
+            success: false,
+          });
+        }
+        const record = await FCMToken.findOne({
+          fcmToken,
+          tenantId,
+          isActive: true,
+        }).select("fcmToken userId");
+        if (!record) {
+          return res.status(404).json({
+            message: "No active FCM token found for this tenant",
+            success: false,
+          });
+        }
+        targets = [{ fcmToken: record.fcmToken, userId: record.userId }];
+      } else {
+        const userIds = normalizeUserIds(req.body.userId);
+        if (userIds.length === 0) {
+          return res.status(400).json({
+            message: "Either fcmToken or userId must be provided",
+            success: false,
+          });
+        }
+        if (userIds.length > MAX_SEND_RECIPIENTS) {
+          return res.status(400).json({
+            message: `Too many recipients (max ${MAX_SEND_RECIPIENTS})`,
             success: false,
           });
         }
 
         const activeTokens = await FCMToken.find({
-          userId: targetUserId,
           tenantId,
+          userId: { $in: userIds },
           isActive: true,
-        }).select("fcmToken");
+        }).select("fcmToken userId");
 
         if (activeTokens.length === 0) {
           return res.status(404).json({
@@ -259,165 +322,42 @@ const sendFirebaseNotification = {
             success: false,
           });
         }
-
-        tokensToSend = activeTokens.map((token) => token.fcmToken);
-      } else {
-        return res.status(400).json({
-          message: "Either fcmToken or userId must be provided",
-          success: false,
-        });
+        targets = activeTokens.map((t) => ({ fcmToken: t.fcmToken, userId: t.userId }));
       }
 
-      // Get userId and tenantId for notification history if not already determined
-      if (!targetUserId && fcmToken) {
-        // Try to find userId from token
-        const tokenRecord = await FCMToken.findOne({ fcmToken }).select(
-          "userId tenantId"
-        );
-        if (tokenRecord) {
-          targetUserId = tokenRecord.userId;
-          if (!tenantId) {
-            tenantId = tokenRecord.tenantId;
-          }
-        }
-      }
-
-      // Fallback to JWT values if still not determined
-      if (!targetUserId) {
-        targetUserId = jwtUserId;
-      }
-      if (!tenantId) {
-        tenantId = jwtTenantId;
-      }
-
-      // Send notifications to all tokens
       const results = await Promise.allSettled(
-        tokensToSend.map((token) =>
-          notificationService.sendNotification(title, body, token)
-        )
+        targets.map((t) => notificationService.sendNotification(title, body, t.fcmToken))
       );
 
       const successful = results.filter((r) => r.status === "fulfilled").length;
       const failed = results.filter((r) => r.status === "rejected").length;
 
-      // Save notification history for each result
-      const notificationHistoryPromises = [];
+      // History rows always carry the trusted tenant and the token owner's userId.
+      const historyRows = results.map((result, i) => ({
+        tenantId,
+        userId: targets[i].userId,
+        fcmToken: targets[i].fcmToken.substring(0, 20) + "...", // Store partial for privacy
+        title,
+        body,
+        status: result.status === "fulfilled" ? "sent" : "failed",
+        firebaseMessageId: result.status === "fulfilled" ? result.value || null : null,
+        error:
+          result.status === "rejected"
+            ? result.reason?.message || result.reason?.toString() || "Unknown error"
+            : null,
+        sentAt: new Date(),
+      }));
 
-      // If userId is provided, all tokens should have same userId/tenantId, so we can batch
-      // Otherwise, we need to look up each token individually
-      if (targetUserId && tenantId) {
-        // All tokens belong to same user, batch create
-        for (let i = 0; i < results.length; i++) {
-          const result = results[i];
-          const token = tokensToSend[i];
-
-          notificationHistoryPromises.push(
-            NotificationHistory.create({
-              tenantId,
-              userId: targetUserId,
-              fcmToken: token.substring(0, 20) + "...", // Store partial for privacy
-              title,
-              body,
-              status: result.status === "fulfilled" ? "sent" : "failed",
-              firebaseMessageId:
-                result.status === "fulfilled" ? result.value || null : null,
-              error:
-                result.status === "rejected"
-                  ? result.reason?.message ||
-                    result.reason?.toString() ||
-                    "Unknown error"
-                  : null,
-              sentAt: new Date(),
-            })
-          );
-        }
-      } else {
-        // Need to look up userId/tenantId for each token
-        for (let i = 0; i < results.length; i++) {
-          const result = results[i];
-          const token = tokensToSend[i];
-
-          const tokenRecord = await FCMToken.findOne({
-            fcmToken: token,
-          }).select("userId tenantId");
-
-          if (tokenRecord && tokenRecord.userId && tokenRecord.tenantId) {
-            notificationHistoryPromises.push(
-              NotificationHistory.create({
-                tenantId: tokenRecord.tenantId,
-                userId: tokenRecord.userId,
-                fcmToken: token.substring(0, 20) + "...", // Store partial for privacy
-                title,
-                body,
-                status: result.status === "fulfilled" ? "sent" : "failed",
-                firebaseMessageId:
-                  result.status === "fulfilled" ? result.value || null : null,
-                error:
-                  result.status === "rejected"
-                    ? result.reason?.message ||
-                      result.reason?.toString() ||
-                      "Unknown error"
-                    : null,
-                sentAt: new Date(),
-              })
-            );
-          } else {
-            logger.warn(
-              { fcmToken: token.substring(0, 20) + "..." },
-              "Skipping notification history - token not found or missing userId/tenantId"
-            );
-          }
-        }
-      }
-
-      // Save all notification histories to database
-      if (notificationHistoryPromises.length > 0) {
-        try {
-          await Promise.all(notificationHistoryPromises);
-          logger.info(
-            { count: notificationHistoryPromises.length },
-            "Notification history saved to database"
-          );
-        } catch (err) {
-          logger.error(
-            { error: err.message },
-            "Error saving notification history"
-          );
-          // Don't fail the request if history save fails, but log it
-        }
-      } else {
-        // If no history was created, create a record anyway if we have userId/tenantId
-        if (targetUserId && tenantId) {
-          try {
-            await NotificationHistory.create({
-              tenantId,
-              userId: targetUserId,
-              fcmToken: tokensToSend[0]
-                ? tokensToSend[0].substring(0, 20) + "..."
-                : "unknown",
-              title,
-              body,
-              status: successful > 0 ? "sent" : "failed",
-              firebaseMessageId: null,
-              error: failed > 0 ? "Some notifications failed to send" : null,
-              sentAt: new Date(),
-            });
-            logger.info("Notification history saved to database (fallback)");
-          } catch (err) {
-            logger.error(
-              { error: err.message },
-              "Error saving notification history (fallback)"
-            );
-          }
-        } else {
-          logger.warn(
-            "Could not save notification history - missing userId or tenantId"
-          );
-        }
+      try {
+        await Promise.all(historyRows.map((row) => NotificationHistory.create(row)));
+        logger.info({ count: historyRows.length }, "Notification history saved to database");
+      } catch (err) {
+        // Don't fail the request if history save fails, but log it
+        logger.error({ error: err.message }, "Error saving notification history");
       }
 
       logger.info(
-        { total: tokensToSend.length, successful, failed },
+        { total: targets.length, successful, failed, tenantId },
         "Notifications sent"
       );
 
@@ -425,7 +365,7 @@ const sendFirebaseNotification = {
         message: "Notification(s) sent successfully",
         success: true,
         data: {
-          total: tokensToSend.length,
+          total: targets.length,
           successful,
           failed,
         },
@@ -443,23 +383,32 @@ const sendFirebaseNotification = {
   // Get all active tokens
   getAllActiveTokens: async (req, res) => {
     try {
+      const tenantId = trustedTenantId(req);
+      if (!tenantId) {
+        return res.status(401).json({
+          message: "Authenticated tenant is required",
+          success: false,
+        });
+      }
+
       const { page = 1, limit = 500 } = req.query;
       const skip = (page - 1) * limit;
+      const query = { tenantId, isActive: true };
 
-      const tokens = await FCMToken.find({ isActive: true })
+      const tokens = await FCMToken.find(query)
         .select("-__v")
         .sort({ lastUsedAt: -1 })
         .limit(parseInt(limit))
         .skip(skip)
         .lean();
 
-      const total = await FCMToken.countDocuments({ isActive: true });
+      const total = await FCMToken.countDocuments(query);
 
       // Extract unique userIds from tokens
       const userIds = [...new Set(tokens.map((t) => t.userId).filter(Boolean))];
 
-      // Fetch profiles for these userIds
-      const profilesByUserId = await fetchProfilesByUserIds(userIds);
+      // Fetch profiles for these userIds (forward the caller's JWT)
+      const profilesByUserId = await fetchProfilesByUserIds(userIds, req);
 
       // Enrich tokens with profile data
       const enrichedTokens = tokens.map((token) => ({
@@ -498,25 +447,24 @@ const sendFirebaseNotification = {
   // Get filtered tokens by tenantId, platform, deviceId, or userId
   getFilteredTokens: async (req, res) => {
     try {
-      const {
-        tenantId,
-        userId,
-        platform,
-        deviceId,
-        isActive = true,
-      } = req.query;
+      // ?tenantId= is ignored: results are always the caller's own tenant.
+      const tenantId = trustedTenantId(req);
+      if (!tenantId) {
+        return res.status(401).json({
+          message: "Authenticated tenant is required",
+          success: false,
+        });
+      }
+
+      const { userId, platform, deviceId, isActive = true } = req.query;
       const { page = 1, limit = 500 } = req.query;
       const skip = (page - 1) * limit;
 
       // Build query object based on provided filters
-      const query = {};
-
-      if (tenantId) {
-        query.tenantId = tenantId;
-      }
+      const query = { tenantId };
 
       if (userId) {
-        query.userId = userId;
+        query.userId = String(userId);
       }
 
       if (platform) {
@@ -534,7 +482,7 @@ const sendFirebaseNotification = {
       }
 
       if (deviceId) {
-        query.deviceId = deviceId;
+        query.deviceId = String(deviceId);
       }
 
       // Filter by active status (default to true, but allow explicit false)

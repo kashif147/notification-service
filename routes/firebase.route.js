@@ -1,19 +1,50 @@
 const express = require("express");
 const router = express.Router();
 const sendFirebaseNotification = require("../controllers/firebase.controller");
-const { authenticate } = require("../middlewares/auth");
+const { authenticate, requireCrmUser } = require("../middlewares/auth");
 const { tenantContextWarn } = require("../middlewares/tenantContext.mw");
 
-// Token registration endpoints
-router.post("/register-token", sendFirebaseNotification.registerToken);
-router.post("/unregister-token", sendFirebaseNotification.unregisterToken);
+// Phase 2B0: every firebase route is authenticated. Tenant and (for self-service routes) user
+// identity come only from the trusted auth context, never from the request body or query.
 
-// Token retrieval endpoints
-router.get("/tokens", sendFirebaseNotification.getAllActiveTokens);
-router.get("/tokens/filter", sendFirebaseNotification.getFilteredTokens);
+// Token registration endpoints (self-service: the caller's own device, own account)
+router.post(
+  "/register-token",
+  authenticate,
+  tenantContextWarn,
+  sendFirebaseNotification.registerToken
+);
+router.post(
+  "/unregister-token",
+  authenticate,
+  tenantContextWarn,
+  sendFirebaseNotification.unregisterToken
+);
 
-// Notification sending endpoint
-router.post("/send-notification", sendFirebaseNotification.sendNotification);
+// Token retrieval endpoints (CRM staff only, scoped to the caller's tenant)
+router.get(
+  "/tokens",
+  authenticate,
+  tenantContextWarn,
+  requireCrmUser,
+  sendFirebaseNotification.getAllActiveTokens
+);
+router.get(
+  "/tokens/filter",
+  authenticate,
+  tenantContextWarn,
+  requireCrmUser,
+  sendFirebaseNotification.getFilteredTokens
+);
+
+// Notification sending endpoint (CRM staff only, recipients within the caller's tenant)
+router.post(
+  "/send-notification",
+  authenticate,
+  tenantContextWarn,
+  requireCrmUser,
+  sendFirebaseNotification.sendNotification
+);
 
 // Notification history endpoints (authentication only - data filtered by userId/tenantId)
 // Users can only access their own notifications (tenant isolation)
