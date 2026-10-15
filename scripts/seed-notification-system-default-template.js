@@ -25,10 +25,7 @@ function parseTenantId() {
 
 const tenantId = parseTenantId();
 const uri =
-  process.env.MONGO_URI ||
-  (process.env.MONGO_USER && process.env.MONGO_PASS && process.env.MONGO_DB
-    ? `mongodb+srv://${process.env.MONGO_USER}:${process.env.MONGO_PASS}@cluster.mongodb.net/${process.env.MONGO_DB}`
-    : "");
+  process.env.MONGO_URI || "";
 
 async function main() {
   if (!tenantId) {
@@ -36,7 +33,7 @@ async function main() {
     process.exit(1);
   }
   if (!uri) {
-    console.error("Set MONGO_URI (or MONGO_USER/MONGO_PASS/MONGO_DB)");
+    console.error("Set MONGO_URI");
     process.exit(1);
   }
 
