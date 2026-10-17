@@ -61,6 +61,7 @@ if (
 const express = require("express");
 const compression = require("compression");
 const pinoHttp = require("pino-http");
+const { REQUEST_LOG_REDACT } = require("./config/requestLogRedaction.js");
 const helmet = require("helmet");
 const { corsMiddleware } = require("./config/cors.js");
 const { limiterGeneral } = require("./config/rateLimiters.js");
@@ -134,6 +135,8 @@ process.on("SIGINT", async () => {
 app.use(
   pinoHttp({
     logger,
+    // Never log credentials: the default request/response serializers include every header.
+    redact: REQUEST_LOG_REDACT,
     autoLogging: {
       ignore: (req) => req.path === "/health" || req.path.startsWith("/health/"),
     },

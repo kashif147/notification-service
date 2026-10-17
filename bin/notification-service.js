@@ -2,7 +2,7 @@
 
 const http = require("http");
 const { Server } = require("socket.io");
-const jwt = require("jsonwebtoken");
+const { createSocketAuthMiddleware, socketRooms } = require("../middlewares/socketAuth");
 
 const dotenvFlow = require("dotenv-flow");
 dotenvFlow.config();
@@ -37,41 +37,15 @@ async function start() {
 
   const onlineUsers = new Map(); // tenant:user -> Set(socketIds)
 
-  // JWT auth
-  io.use((socket, next) => {
-    try {
-      const token =
-        socket.handshake.auth?.token || socket.handshake.query?.token;
-      if (!token) return next(new Error("Unauthorized"));
-
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-      const userId = decoded.sub || decoded.id;
-      const tenantId =
-        decoded.tenantId || decoded.tid || decoded.extension_tenantId;
-
-      if (!userId || !tenantId) {
-        return next(new Error("Invalid token: missing userId or tenantId"));
-      }
-
-      socket.user = {
-        userId,
-        tenantId,
-      };
-
-      next();
-    } catch (err) {
-      next(new Error("Invalid token"));
-    }
-  });
+  // JWT auth: Socket.IO auth payload only (see middlewares/socketAuth.js)
+  io.use(createSocketAuthMiddleware());
 
   io.on("connection", async (socket) => {
     try {
       const { userId, tenantId } = socket.user;
       const userKey = `${tenantId}:${userId}`;
 
-      socket.join(`tenant:${tenantId}`);
-      socket.join(`user:${userId}`);
+      for (const room of socketRooms({ userId, tenantId })) socket.join(room);
 
       if (!onlineUsers.has(userKey)) {
         onlineUsers.set(userKey, new Set());
