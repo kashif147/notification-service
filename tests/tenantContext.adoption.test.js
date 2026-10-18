@@ -94,7 +94,8 @@ test("1 tenantContextWarn exists (exported, callable)", () => {
 });
 test("2 guard mode is warn; no enforce", () => {
   const src = read(path.join("middlewares", "tenantContext.mw.js"));
-  assert.match(src, /tenantContextMiddleware\(\{\s*mode:\s*"warn"\s*\}\)/);
+  assert.match(src, /tenantContextMiddleware\(\)/); // mode comes from TENANT_CONTEXT_MODE (default warn)
+  assert.ok(!/mode:\s*"warn"/.test(src), "no hard-coded warn override");
   assert.ok(!/mode:\s*"enforce"/.test(src));
 });
 test("3 app.js imports tenantContextWarn", () => {
@@ -243,7 +244,8 @@ test("29 mismatch is non-blocking: next() called, no 403", () => {
 });
 test("30 warn only, not enforce; package exposes both primitives", () => {
   const src = read(path.join("middlewares", "tenantContext.mw.js"));
-  assert.match(src, /mode:\s*"warn"/);
+  assert.match(src, /tenantContextMiddleware\(\)/); // mode comes from TENANT_CONTEXT_MODE (default warn)
+  assert.ok(!/mode:\s*"warn"/.test(src), "no hard-coded warn override");
   assert.ok(!/mode:\s*"enforce"/.test(src));
   assert.equal(typeof tenantContextMiddleware, "function");
   assert.equal(typeof resolveTenantContext, "function");

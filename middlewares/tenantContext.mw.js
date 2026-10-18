@@ -17,7 +17,7 @@ const { tenantContextMiddleware } = require("@membership/policy-middleware");
  * route, RabbitMQ consumers, and Socket.IO delivery are deliberately out of
  * scope (parked N2/N3/N4).
  */
-const tenantContextWarn = tenantContextMiddleware({ mode: "warn" });
+const tenantContextWarn = tenantContextMiddleware();
 
 module.exports = {
   tenantContextWarn,
