@@ -153,8 +153,9 @@ async function dispatchNotification(event, io, onlineUsers) {
       failedSends += 1;
       failureReasons.push(err?.message || "Unknown error");
       if (isInvalidOrUnregisteredTokenError(err)) {
+        // Phase A / A6: deactivate only this tenant's binding of the invalid token.
         await FCMToken.updateMany(
-          { fcmToken: tokenDoc.fcmToken, isActive: true },
+          { tenantId: tokenDoc.tenantId, fcmToken: tokenDoc.fcmToken, isActive: true },
           { $set: { isActive: false } }
         );
       }

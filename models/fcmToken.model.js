@@ -15,11 +15,10 @@ const FCMTokenSchema = new mongoose.Schema(
       index: true,
     },
     // FCM token from client
+    // Phase A / A6: unique per tenant (not globally); see indexes below.
     fcmToken: {
       type: String,
       required: true,
-      unique: true,
-      // index: true,
     },
     // Device identifier (optional, for tracking multiple devices per user)
     deviceId: {
@@ -53,7 +52,14 @@ const FCMTokenSchema = new mongoose.Schema(
 // Compound indexes for efficient queries
 FCMTokenSchema.index({ tenantId: 1, userId: 1 });
 FCMTokenSchema.index({ tenantId: 1, userId: 1, isActive: 1 });
-FCMTokenSchema.index({ fcmToken: 1 }, { unique: true });
+// Phase A / A6: a token binding is unique per tenant, and a physical token has at most ONE active
+// binding across tenants (explicit handoff deactivates the previous one). Built/verified by
+// scripts/migrate-fcmtoken-tenant-indexes.js, which also drops the old global fcmToken_1.
+FCMTokenSchema.index({ tenantId: 1, fcmToken: 1 }, { unique: true, name: "tenantId_1_fcmToken_1" });
+FCMTokenSchema.index(
+  { fcmToken: 1 },
+  { unique: true, name: "fcmToken_active_unique", partialFilterExpression: { isActive: true } }
+);
 
 // Update lastUsedAt before saving
 FCMTokenSchema.pre("save", function (next) {

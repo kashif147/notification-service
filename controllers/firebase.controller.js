@@ -101,6 +101,61 @@ function normalizeUserIds(raw) {
   ];
 }
 
+
+// Phase A / A6 — tenant-owned token binding with explicit cross-tenant handoff. Never logs token values.
+async function bindTokenToTenant({ tenantId, userId, fcmToken, deviceId, platform }) {
+  const now = new Date();
+  const foreign = await FCMToken.find({ fcmToken, isActive: true, tenantId: { $ne: tenantId } })
+    .select("_id tenantId")
+    .lean();
+  if (foreign.length) {
+    await FCMToken.updateMany(
+      { _id: { $in: foreign.map((f) => f._id) }, tenantId: { $ne: tenantId }, isActive: true },
+      { $set: { isActive: false, lastUsedAt: now } }
+    );
+    logger.warn(
+      {
+        event: "FcmTokenTenantHandoff",
+        toTenantId: tenantId,
+        toUserId: userId,
+        fromTenantIds: [...new Set(foreign.map((f) => String(f.tenantId)))],
+        deactivatedBindingIds: foreign.map((f) => String(f._id)),
+      },
+      "FCM token handed off to another tenant: previous tenant binding deactivated"
+    );
+  }
+  const upsert = () =>
+    FCMToken.findOneAndUpdate(
+      { tenantId, fcmToken },
+      {
+        $set: {
+          tenantId,
+          fcmToken,
+          userId,
+          deviceId: deviceId || null,
+          platform: platform || "android",
+          isActive: true,
+          lastUsedAt: now,
+        },
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+  try {
+    return await upsert();
+  } catch (err) {
+    // A concurrent registration can race the active-binding unique index; one retry after re-running
+    // the handoff resolves it deterministically.
+    if (err && err.code === 11000) {
+      await FCMToken.updateMany(
+        { fcmToken, isActive: true, tenantId: { $ne: tenantId } },
+        { $set: { isActive: false, lastUsedAt: now } }
+      );
+      return upsert();
+    }
+    throw err;
+  }
+}
+
 const sendFirebaseNotification = {
   // Register/Update FCM token for the authenticated caller (self-service only)
   registerToken: async (req, res) => {
@@ -137,24 +192,12 @@ const sendFirebaseNotification = {
         );
       }
 
-      // Upsert: Update if exists, create if not
-      const tokenData = await FCMToken.findOneAndUpdate(
-        { fcmToken: fcmToken },
-        {
-          tenantId,
-          userId,
-          fcmToken,
-          deviceId: deviceId || null,
-          platform: platform || "android",
-          isActive: true,
-          lastUsedAt: new Date(),
-        },
-        {
-          upsert: true,
-          new: true,
-          setDefaultsOnInsert: true,
-        }
-      );
+      // Phase A / A6: a token binding is owned by exactly one tenant and its tenantId never changes.
+      // The same physical token registered by another tenant is an EXPLICIT handoff: the other
+      // tenant's active binding is deactivated (tenant untouched) and logged; then this tenant's
+      // own binding is upserted, keyed by { tenantId, fcmToken }. At most one active binding exists
+      // per physical token (partial unique index, scripts/migrate-fcmtoken-tenant-indexes.js).
+      const tokenData = await bindTokenToTenant({ tenantId, userId, fcmToken, deviceId, platform });
 
       // Keep one active token per device for this user+tenant to reduce stale duplicates.
       // If token rotated on same device, deactivate older active tokens.
@@ -923,3 +966,4 @@ const sendFirebaseNotification = {
 };
 
 module.exports = sendFirebaseNotification;
+module.exports.bindTokenToTenant = bindTokenToTenant;
