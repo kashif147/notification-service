@@ -1,5 +1,10 @@
 const Template = require("../models/template.model.js");
 const { AppError } = require("../errors/AppError.js");
+const {
+  assertSharedTemplateDeleteAllowed,
+  assertSharedTemplateUpdateAllowed,
+  isFrozenSharedTemplate,
+} = require("./sharedTemplateFreeze");
 
 function toTemplateResponse(doc) {
   const obj =
@@ -146,6 +151,11 @@ class NotificationFilterTemplateService {
     const type =
       templateType !== undefined ? templateType : template.templateType;
 
+    // Phase A / A14: a shared (null-tenant) default is write-frozen - 423 on any real change; the
+    // per-user isDefault preference still works and the shared row itself is never saved.
+    assertSharedTemplateUpdateAllowed(template, updateData);
+    const sharedFrozen = isFrozenSharedTemplate(template);
+
     if (template.systemDefault) {
       if (isDefault === true) {
         await Template.updateMany(
@@ -159,7 +169,7 @@ class NotificationFilterTemplateService {
         );
       }
       if (pinned !== undefined) template.pinned = pinned;
-      const saved = await template.save();
+      const saved = sharedFrozen ? template : await template.save();
       const response = toTemplateResponse(saved);
       if (isDefault === true) response.isDefault = true;
       return response;
@@ -221,6 +231,7 @@ class NotificationFilterTemplateService {
       throw AppError.notFound("Filter template not found");
     }
 
+    assertSharedTemplateDeleteAllowed(template); // Phase A / A14: shared default -> 423
     template.meta.deleted = true;
     template.meta.deletedAt = new Date();
     return template.save();

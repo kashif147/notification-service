@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const { tenantOwnershipPlugin } = require("./plugins/tenantOwnership.plugin");
 
 const FCMTokenSchema = new mongoose.Schema(
   {
@@ -66,5 +67,8 @@ FCMTokenSchema.pre("save", function (next) {
   this.lastUsedAt = new Date();
   next();
 });
+
+// Phase A / A15: tenantId is immutable once written (ownership cannot move between tenants).
+FCMTokenSchema.plugin(tenantOwnershipPlugin, { modelName: "FCMToken" });
 
 module.exports = mongoose.model("FCMToken", FCMTokenSchema);
