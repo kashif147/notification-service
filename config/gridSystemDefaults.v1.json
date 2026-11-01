@@ -2,10 +2,9 @@
   "version": 1,
   "source": {
     "kind": "service-code",
-    "provisional": true,
     "file": "constants/notificationTemplate.js",
     "export": "NOTIFICATION_RESPONSE_COLUMNS",
-    "note": "The only definition of the notification grid default (also used by scripts/seed-notification-system-default-template.js). No labels are defined in code. Content needs owner confirmation before provisioning relies on it."
+    "note": "The only definition of the notification grid default (also used by scripts/seed-notification-system-default-template.js). No labels are defined in code. Owner-validated and accepted as the canonical v1 default (2026-11-01, provisioning P1); provisional status cleared."
   },
   "templates": {
     "notification": {
