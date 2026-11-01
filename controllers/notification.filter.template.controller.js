@@ -126,9 +126,12 @@ exports.deleteTemplate = async (req, res, next) => {
 exports.getDefaultTemplate = async (req, res, next) => {
   try {
     const { tenantId, userId } = crmContext(req);
+    // Read-only: the user's default, else the tenant's system default, else null (= the client's
+    // built-in default). Never creates a view.
     const template = await notificationFilterTemplateService.getDefaultTemplate(
       tenantId,
-      userId
+      userId,
+      req.query.type || req.query.templateType || "notification"
     );
     return res.success(template);
   } catch (e) {

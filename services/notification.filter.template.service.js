@@ -237,28 +237,36 @@ class NotificationFilterTemplateService {
     return template.save();
   }
 
-  async getDefaultTemplate(tenantId, userId) {
-    let template = await Template.findOne({
+  /**
+   * Resolve (never create) the caller's default view for a template type, strictly within the tenant:
+   * the user's own isDefault view, else the tenant's system default, else null = the client's built-in
+   * default. Read-only: it used to persist a blank user view (columns: []) when the user had no
+   * default, which then took priority over the system default in PUT /filter.
+   */
+  async getDefaultTemplate(tenantId, userId, type = "notification") {
+    const resolvedType = String(type || "notification").trim();
+    const own = await Template.findOne({
       tenantId,
       userId,
+      templateType: resolvedType,
       isDefault: true,
       "meta.deleted": false,
     });
+    if (own) return toTemplateResponse(own);
 
-    if (!template) {
-      template = new Template({
-        tenantId,
-        userId,
-        templateType: "notification",
-        filters: {},
-        columns: [],
-        isDefault: true,
-        pinned: false,
-      });
-      template = await template.save();
+    const systemDefault = await Template.findOne({
+      tenantId,
+      templateType: resolvedType,
+      systemDefault: true,
+      "meta.deleted": false,
+    });
+    if (systemDefault) {
+      const out = toTemplateResponse(systemDefault);
+      out.isDefault = true;
+      return out;
     }
 
-    return template;
+    return null;
   }
 
   async getDefaultTemplateForType(tenantId, userId, type = "notification") {
