@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "source": {
+    "kind": "service-code",
+    "provisional": true,
+    "file": "constants/notificationTemplate.js",
+    "export": "NOTIFICATION_RESPONSE_COLUMNS",
+    "note": "The only definition of the notification grid default (also used by scripts/seed-notification-system-default-template.js). No labels are defined in code. Content needs owner confirmation before provisioning relies on it."
+  },
+  "templates": {
+    "notification": {
+      "name": "System default",
+      "templateType": "notification",
+      "columns": [
+        "_id",
+        "tenantId",
+        "userId",
+        "title",
+        "body",
+        "status",
+        "isRead",
+        "createdAt",
+        "updatedAt",
+        "sentAt",
+        "readAt",
+        "metadata",
+        "firebaseMessageId",
+        "error"
+      ],
+      "columnLabels": {},
+      "filters": {},
+      "visibleFilters": []
+    }
+  }
+}
