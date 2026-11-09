@@ -3,6 +3,7 @@ const router = express.Router();
 const sendFirebaseNotification = require("../controllers/firebase.controller");
 const { authenticate, requireCrmUser } = require("../middlewares/auth");
 const { tenantContextWarn } = require("../middlewares/tenantContext.mw");
+const { defaultPolicyMiddleware } = require("../middlewares/policy.middleware");
 
 // Phase 2B0: every firebase route is authenticated. Tenant and (for self-service routes) user
 // identity come only from the trusted auth context, never from the request body or query.
@@ -37,12 +38,14 @@ router.get(
   sendFirebaseNotification.getFilteredTokens
 );
 
-// Notification sending endpoint (CRM staff only, recipients within the caller's tenant)
+// Notification sending endpoint (CRM staff only, recipients within the caller's tenant).
+// P6: the caller also needs notifications:create from the PDP (ASU by its own-tenant rule; MO holds it).
 router.post(
   "/send-notification",
   authenticate,
   tenantContextWarn,
   requireCrmUser,
+  defaultPolicyMiddleware.requirePermission("notifications", "create"),
   sendFirebaseNotification.sendNotification
 );
 
