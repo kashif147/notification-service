@@ -148,10 +148,15 @@ test("12 Phase 2B0: the 5 firebase token/send routes are authenticated (3 also C
   ]) {
     assert.ok(!s.includes(line), `no longer unauthenticated: ${line}`);
   }
+  // P6: send-notification also asks the PDP for notifications:create after requireCrmUser.
+  assert.match(
+    s,
+    /"\/send-notification",\s*authenticate,\s*tenantContextWarn,\s*requireCrmUser,\s*defaultPolicyMiddleware\.requirePermission\("notifications", "create"\),\s*sendFirebaseNotification\.sendNotification/,
+    "/send-notification is authenticate -> tenantContextWarn -> requireCrmUser -> PDP notifications:create"
+  );
   for (const [route, handler] of [
     ['"/tokens"', "getAllActiveTokens"],
     ['"/tokens/filter"', "getFilteredTokens"],
-    ['"/send-notification"', "sendNotification"],
   ]) {
     const re = new RegExp(
       `${route.replace(/[/.]/g, "\\$&")},\\s*authenticate,\\s*tenantContextWarn,\\s*requireCrmUser,\\s*sendFirebaseNotification\\.${handler}`

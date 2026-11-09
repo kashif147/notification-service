@@ -82,9 +82,12 @@ const FakeHistory = { create: async (row) => (history.push(row), row) };
 const fakeNotificationService = {
   sendNotification: async (title, body, token) => (pushes.push({ title, body, token }), `msg-${token}`),
 };
-const fakeAxios = {
+// Profile enrichment (axios.post) is faked; a direct axios(config) call - the policy client's PDP request -
+// goes to the real axios, i.e. to the in-process fake PDP below.
+const realAxios = require("axios");
+const fakeAxios = Object.assign((config) => realAxios(config), {
   post: async (url, body, opts) => (profileCalls.push({ url, body, headers: opts.headers }), { data: { success: true, data: {} } }),
-};
+});
 
 const stub = (rel, exportsObj) => {
   const file = require.resolve(rel);
@@ -99,6 +102,32 @@ require.cache[require.resolve("axios")] = {
   loaded: true,
   exports: fakeAxios,
 };
+
+// ---------------- fake PDP (P6: send-notification asks for notifications:create) ----------------
+// Header path, like user-service: PERMIT a CRM caller holding ASU (own-tenant admin rule) or the exact
+// claim; anything else DENY (403). Listening starts now and completes before any test sends a request.
+const http = require("http");
+const pdpCalls = [];
+const pdp = http.createServer((req, res) => {
+  let raw = "";
+  req.on("data", (c) => (raw += c));
+  req.on("end", () => {
+    const body = JSON.parse(raw || "{}");
+    const perm = `${body.resource}:${body.action}`;
+    const roles = JSON.parse(req.headers["x-user-roles"] || "[]");
+    const perms = JSON.parse(req.headers["x-user-permissions"] || "[]");
+    pdpCalls.push({ perm, userId: req.headers["x-user-id"], tenantId: req.headers["x-tenant-id"] });
+    const permit = req.headers["x-user-type"] === "CRM" && (roles.includes("ASU") || perms.includes(perm));
+    res.writeHead(permit ? 200 : 403, { "content-type": "application/json" });
+    res.end(JSON.stringify(permit
+      ? { success: true, decision: "PERMIT", user: { id: req.headers["x-user-id"], tenantId: req.headers["x-tenant-id"], userType: "CRM", roles, permissions: perms } }
+      : { success: false, decision: "DENY", reason: "TEST_PDP_DENY" }));
+  });
+});
+const PDP_PORT = 20000 + Math.floor(Math.random() * 30000);
+pdp.listen(PDP_PORT, "127.0.0.1");
+pdp.unref();
+process.env.POLICY_SERVICE_URL = `http://127.0.0.1:${PDP_PORT}`;
 
 const firebaseRoutes = require("../routes/firebase.route.js");
 
@@ -124,6 +153,8 @@ const ident = (tenantId, userId, userType) => ({
   "x-user-permissions": "[]",
 });
 const CRM_A = ident(TENANT_A, "crm-A", "CRM");
+// P6: the sender holds notifications:create (MO in the role target); CRM_A itself holds nothing.
+const CRM_SENDER = { ...ident(TENANT_A, "crm-sender", "CRM"), "x-user-roles": JSON.stringify(["MO"]), "x-user-permissions": JSON.stringify(["notifications:create"]) };
 const PORTAL_A1 = ident(TENANT_A, "uA1", "PORTAL");
 const PORTAL_B1 = ident(TENANT_B, "uB1", "PORTAL");
 
@@ -240,12 +271,12 @@ test("F unregister-token cannot deactivate another user's or another tenant's to
 test("G CRM send cannot target another tenant's users or raw tokens", async () => {
   seed();
   const byUser = await call("POST", "/api/firebase/send-notification", {
-    headers: CRM_A,
+    headers: CRM_SENDER,
     body: { title: "t", body: "b", userId: ["uB1"], tenantId: [TENANT_B] },
   });
   assert.strictEqual(byUser.status, 404);
   const byToken = await call("POST", "/api/firebase/send-notification", {
-    headers: CRM_A,
+    headers: CRM_SENDER,
     body: { title: "t", body: "b", fcmToken: "tok-B1", tenantId: TENANT_B },
   });
   assert.strictEqual(byToken.status, 404);
@@ -256,7 +287,7 @@ test("G CRM send cannot target another tenant's users or raw tokens", async () =
 test("H CRM send to own-tenant users works (array userId) and history uses the trusted tenant", async () => {
   seed();
   const res = await call("POST", "/api/firebase/send-notification", {
-    headers: CRM_A,
+    headers: CRM_SENDER,
     body: { title: "Hello", body: "World", userId: ["uA1", "uA2", "uB1"], tenantId: [TENANT_B, TENANT_B, TENANT_B] },
   });
   assert.strictEqual(res.status, 200);
@@ -265,4 +296,43 @@ test("H CRM send to own-tenant users works (array userId) and history uses the t
   assert.strictEqual(history.length, 2);
   for (const h of history) assert.strictEqual(h.tenantId, TENANT_A);
   assert.deepStrictEqual(history.map((h) => h.userId).sort(), ["uA1", "uA2"]);
+});
+
+test("P6 send-notification: ASU and a CRM notifications:create holder pass; CRM without it (REO, PSG-CRM, empty), PORTAL refused before any push", async () => {
+  const send = (headers) => call("POST", "/api/firebase/send-notification", { headers, body: { title: "t", body: "b", userId: ["uA1"] } });
+  const crm = (id, roles, perms) => ({ ...ident(TENANT_A, id, "CRM"), "x-user-roles": JSON.stringify(roles), "x-user-permissions": JSON.stringify(perms) });
+  for (const [h, label] of [[crm("p6-asu", ["ASU", "REO"], []), "ASU (+REO)"], [crm("p6-mo", ["IRO", "MO"], ["notifications:create"]), "MO notifications:create"]]) {
+    seed();
+    const before = pdpCalls.length;
+    const res = await send(h);
+    assert.strictEqual(res.status, 200, `${label}: ${res.status}`);
+    assert.deepStrictEqual(pdpCalls.slice(before).map((c) => c.perm), ["notifications:create"], label);
+    assert.strictEqual(pushes.length, 1, label);
+  }
+  for (const [h, label] of [
+    [crm("p6-reo", ["REO"], ["subscriptions:write", "transferRequests:write", "notifications:read"]), "REO"],
+    [crm("p6-psg", ["PSG-CRM"], []), "PSG-CRM"],
+    [CRM_A, "CRM no claims"],
+  ]) {
+    seed();
+    const res = await send(h);
+    assert.strictEqual(res.status, 403, `${label}: ${res.status}`);
+    assert.strictEqual(pushes.length, 0, label);
+    assert.strictEqual(history.length, 0, label);
+  }
+  seed();
+  const before = pdpCalls.length;
+  const portal = await send({ ...PORTAL_A1, "x-user-permissions": JSON.stringify(["notifications:create"]) });
+  assert.strictEqual(portal.status, 403, "PORTAL refused by requireCrmUser");
+  assert.strictEqual(pdpCalls.length, before, "PORTAL never reaches the PDP");
+  assert.strictEqual(pushes.length, 0);
+});
+
+test("P6 self-service routes do not consult the PDP (register / unregister token, history)", async () => {
+  seed();
+  const before = pdpCalls.length;
+  await call("POST", "/api/firebase/register-token", { headers: PORTAL_A1, body: { fcmToken: "tok-new", deviceId: "dX", platform: "web" } });
+  await call("POST", "/api/firebase/unregister-token", { headers: PORTAL_A1, body: { fcmToken: "tok-new" } });
+  await call("GET", "/api/firebase/notifications", { headers: PORTAL_A1 });
+  assert.strictEqual(pdpCalls.length, before);
 });
